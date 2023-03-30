@@ -1,0 +1,1486 @@
+---
+title: "miPEP_H_ITS_script"
+author: "Harriet"
+date: "06/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Note: "root" samples (roots, rhizoplane and close rhizosphere) and "soil" samples (distant rhizosphere and unplanted soils) shouldn't be analyzed together. The DNA of these 2 types of samples was not extracted in the same manner: Nucleospin Plant Kit and Griffiths protocole, respectively. Moreover, soil samples 16S and ITS were quantified by qPCR with the addition of BSA (0,67mg/mL), which was not added for the root samples. There should be 96 samples = 8 plants (RACINE) "ROOTS and close rhizosphere" * 4 conditions (miPEPa,b,c, control) + 8 soils (SOL) "distant rhizosphere" + 8 sols nus (SOL.NU) "unplanted soils". 
+
+Loading all the necessary packages and calling my files: I'm using the otu_table_filtered.biom file which is the result of pre-processing (quality control, filtering...) done my the automatic pipeline.
+ASVs found in less than 3 samples are discarded.
+
+```{r}
+library(phyloseq)
+library(data.table)
+library(vegan)
+library(ggplot2)
+library(readxl)
+
+biom_file<-import_biom("~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/otu_tables/otu_table_filtered.biom", "~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/tree/tree.fasttree", "~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/otu_tables/otus.fasta", parseFunction=parse_taxonomy_greengenes)
+biom_file
+```
+
+A data frame is created from the mapping_file, which contains all information concerning each sample. Each row corresponds to a sample and is named in consequence. Merge the biom file and the metadata into one phyloseq object.
+
+```{r}
+sample<- data.frame(fread("~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/mapping_file.tsv", sep="\t"), check.names=F)
+head(sample)
+sample=sample_data(sample)
+
+rownames(sample)<-sample$`#SampleID`
+merge<-merge_phyloseq(biom_file,sample)
+merge
+```
+
+Extract the OTU and taxa table
+
+```{r}
+tax_table = tax_table(merge)
+head(tax_table)
+#remplacer les noms de colonnes Rank1, rank2.. par les noms de taxons
+colnames(tax_table) = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "rank8", "rank9", "rank10", "rank11","rank12")
+head(tax_table)
+#write.table(tax_table, "tax_table.txt")
+
+OTU_table = otu_table(merge)
+#write.table(OTU_table, "OTU_table.txt")
+```
+
+Count the number of sequences in each samples. 
+raremax gives the sample with the lowest sequence number (usefull if rarefying)
+
+```{r}
+Seq<-sample_sums(merge)
+Seq
+#write.table(Seq, "sequences.txt")
+
+min(Seq)
+```
+
+Keep ASVs that are at least present once in three samples.
+
+```{r}
+phylo_filtered = filter_taxa(merge, function(x) sum(x >= 1)>= (3), TRUE)
+OTU_table_phylo_filtered = otu_table(phylo_filtered)
+#write.table(OTU_table_phylo_filtered, "OTU_table_phylo_filtered.txt")
+tax_table_phylo_filtered = tax_table(phylo_filtered)
+#write.table(tax_table_phylo_filtered, "tax_table_phylo_filtered.txt")
+```
+
+After this filtration, you can lose a lot of ASVs (=taxa), but don't lose so much sequences. You can check that by counting them again : here we have lost 35792 sequences and 3353 bacterial taxa.
+
+```{r}
+Seq_filtered<-sample_sums(phylo_filtered)
+Seq_filtered
+#write.table(Seq_filtered, "sequences_filtered.txt")
+```
+
+Have a look at your sequencing depth: do all samples reach a plateau? At which sample size?
+```{r}
+#remotes::install_github("mahendra-mariadassou/phyloseq-extended", ref = "dev")
+library(phyloseq.extended)
+
+p<-ggrare(phylo_filtered, step=100, color = "Compartment", label = "X.SampleID", se = FALSE)
+p<-p + labs(title="Rarefaction curve", subtitle =  "miPEP_H ITS samples")
+p<-p+scale_color_manual(values = c("dark blue", "dark orange", "dark red"))
+p<-p+theme_minimal()
+p <- p + facet_wrap(~Type) 
+p
+```
+
+16S/ITS sequencing doesn't allow for "real" quantitative data. To overcome this, 16S and ITS genes were quantified by qPCR, along with a standard curve, to evaluate the "absolute" number of copies of 16S and ITS in each sample. The mean Ct was converted to a number of copies, by using the equation of the standard curve. For ITS, a ratio of fungal ITS/non-fungal ITS was applied to each sample, corresponding to the sequences counted during sequencing (=fungal ASVs/total ITS ASVs). The number of copies was used to replace the total sum of 16S ASVs, per sample, and each ASV was re-caculated as a number of copies. The resulting "absolute" abundance ASV table needs to be imported into R and processed into a new phyloseq object. 
+1) Export phylo_filtered OTU table 
+2) Open OTU table with Excel
+    - align samples with their correct column
+    - add "calculs" sheet and add "Samples" line and a "ASV ID" column
+    - line 2 = number of ITS copies/sample (final number of copies, after multplied by ITS ratio=nb fungal ITS/total nb of ITS)
+    - CALCULATION: to repeat for each sample: ASV = nb seq ASV * nb copies ITS / sum sequences in that sample 
+3) Add a spread sheed to the Excel file "quant abs"
+    -copy/paste the "calculs" sheet with just the data "1,2,3"
+    -delete the line 2 (with the number of copies)
+    -save as an Excel file (.xlsx)
+4) Put all the cells into format "Number" with no decimals and export the active sheet as .txt (Tabulation)
+5) Go to Galaxy.genouest.org and upload your .txt file, then search for "convert between BIOM table formats" input =.txt and output = BIOM1 file "OTU TABLE". change nothing else 
+6) Dowload the biom file and import to R  
+
+```{r}
+otu_biom <- import_biom("~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/otu_table_absolute_ITS.biom1")
+
+tax <- tax_table(tax_table_phylo_filtered) #taxa hasn't changed
+
+samples <- sample_data(merge) #use your metadata from before
+
+phylo_abs_ITS <- merge_phyloseq(tax,otu_biom,samples)
+
+#Before continuing, we must discard the samples R2c and R7c from the root samples, because no valid Ct was measured in order to quantify the number of ITS copies in these samples.
+Sample_toRemove <- c("X.SampleID"="cR2", "cR7","ctrlS6")
+subset_samples(phylo_abs_ITS, X.SampleID %in% Sample_toRemove)
+subset_samples(phylo_abs_ITS, !(X.SampleID %in% Sample_toRemove))
+phylo_abs_ITS <- subset_samples(phylo_abs_ITS, !(X.SampleID %in% Sample_toRemove))
+phylo_abs_ITS #should have only 93 samples now (-cR2 and cR7 and ctrls6)
+
+tax_table = tax_table(phylo_abs_ITS)
+head(tax_table)
+#remplacer les noms de colonnes Rank1, rank2.. par les noms de taxons
+colnames(tax_table) = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "rank8", "rank9", "rank10", "rank11","rank12")
+head(tax_table)
+#write.table(tax_table, "tax_table.txt")
+
+OTU_table = otu_table(phylo_abs_ITS)
+samples_final <- sample_data(phylo_abs_ITS)
+
+phylo_abs_ITS <- merge_phyloseq(tax_table,OTU_table,samples_final)
+```
+
+```{r}
+correct.order <- c("miPEP-A", "miPEP-B", "miPEP-C", "Control-mi-PEP")
+sample_data(phylo_abs_ITS)$Type <- factor(sample_data(phylo_abs_ITS)$Type, levels = correct.order)
+levels(get_variable(phylo_abs_ITS, "Type")) #mettre dans le bon ordre
+
+phylo_roots <- subset_samples(phylo_abs_ITS, Compartment=="RACINE")
+phylo_soil <- subset_samples(phylo_abs_ITS, Compartment=="SOL")
+phylo_unplanted <- subset_samples(phylo_abs_ITS, Compartment=="SOL.NU")
+```
+
+Venn-Diagrams to show shared ASVs between treatments: limited to 5
+
+```{r}
+# 1) Use a phyloseq object with 1 variable left, you could have to start with phylo_roots, for ex
+phylo_roots
+
+# 2) The next steps are performed on the means of each treatment, so merge treated-samples 
+merge_phyloseq_subset<-merge_samples(phylo_roots,"Type")
+
+# The Types will become numbers in the same order as in the phyloseq:
+# 1=ago; 2=dcl; 3=hen; 4=RTL1; 5=RTL1myc and 6=WT
+
+# 3) Create a table with a dataframe such as OTUs=columns and Type=rows
+table<-t(merge_phyloseq_subset@otu_table@.Data)
+
+# 4) Create a vector per Type to have the right format for Venn Diagram
+cat_1 <- rownames(table)[which(table[,1]!=0)]
+cat_2 <- rownames(table)[which(table[,2]!=0)]
+cat_3 <- rownames(table)[which(table[,3]!=0)]
+cat_4 <- rownames(table)[which(table[,4]!=0)]
+
+
+# 5) These vectors need to be formatted into a list object
+input <- list("miPEP-A"=cat_1,  "miPEP-B"=cat_2, "miPEP-C"=cat_3, "Control-mi-PEP"=cat_4)
+
+library(VennDiagram)
+library(gplots)
+library(reshape2)
+display_venn <- function(x, ...){
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+library(RColorBrewer)
+
+myCol <- brewer.pal(4, "Set2") # the first number = nb of conditions
+display_venn(input, lwd = 2, lty ='blank',  fill=myCol, # Numbers
+        cex = .9,
+        fontface = "italic",
+        # Set names
+        cat.cex = 1,
+        cat.fontface = "bold",
+        cat.default.pos = "outer")
+```
+
+```{r}
+# 1) Use a phyloseq object with 1 variable left, you could have to start with phylo_roots, for ex
+phylo_soil
+
+# 2) The next steps are performed on the means of each treatment, so merge treated-samples 
+merge_phyloseq_subset<-merge_samples(phylo_soil,"Type")
+
+# The Types will become numbers in the same order as in the phyloseq:
+# 1=ago; 2=dcl; 3=hen; 4=RTL1; 5=RTL1myc and 6=WT
+
+# 3) Create a table with a dataframe such as OTUs=columns and Type=rows
+table<-t(merge_phyloseq_subset@otu_table@.Data)
+
+# 4) Create a vector per Type to have the right format for Venn Diagram
+cat_1 <- rownames(table)[which(table[,1]!=0)]
+cat_2 <- rownames(table)[which(table[,2]!=0)]
+cat_3 <- rownames(table)[which(table[,3]!=0)]
+cat_4 <- rownames(table)[which(table[,4]!=0)]
+
+
+# 5) These vectors need to be formatted into a list object
+input <- list("miPEP-A"=cat_1,  "miPEP-B"=cat_2, "miPEP-C"=cat_3, "Control-mi-PEP"=cat_4)
+
+library(VennDiagram)
+library(gplots)
+library(reshape2)
+display_venn <- function(x, ...){
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+library(RColorBrewer)
+
+myCol <- brewer.pal(4, "Set2") # the first number = nb of conditions
+display_venn(input, lwd = 2, lty ='blank',  fill=myCol, # Numbers
+        cex = .9,
+        fontface = "italic",
+        # Set names
+        cat.cex = 1,
+        cat.fontface = "bold",
+        cat.default.pos = "outer")
+```
+
+```{r}
+# 1) Use a phyloseq object with 1 variable left, you could have to start with phylo_roots, for ex
+phylo_unplanted
+
+# 2) The next steps are performed on the means of each treatment, so merge treated-samples 
+merge_phyloseq_subset<-merge_samples(phylo_unplanted,"Type")
+
+# The Types will become numbers in the same order as in the phyloseq:
+# 1=ago; 2=dcl; 3=hen; 4=RTL1; 5=RTL1myc and 6=WT
+
+# 3) Create a table with a dataframe such as OTUs=columns and Type=rows
+table<-t(merge_phyloseq_subset@otu_table@.Data)
+
+# 4) Create a vector per Type to have the right format for Venn Diagram
+cat_1 <- rownames(table)[which(table[,1]!=0)]
+cat_2 <- rownames(table)[which(table[,2]!=0)]
+cat_3 <- rownames(table)[which(table[,3]!=0)]
+cat_4 <- rownames(table)[which(table[,4]!=0)]
+
+# 5) These vectors need to be formatted into a list object
+input <- list("miPEP-A"=cat_1,  "miPEP-B"=cat_2, "miPEP-C"=cat_3, "Control-mi-PEP"=cat_4)
+
+library(VennDiagram)
+library(gplots)
+library(reshape2)
+display_venn <- function(x, ...){
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+library(RColorBrewer)
+
+myCol <- brewer.pal(4, "Set2") # the first number = nb of conditions
+display_venn(input, lwd = 2, lty ='blank',  fill=myCol, # Numbers
+        cex = .9,
+        fontface = "italic",
+        # Set names
+        cat.cex = 1,
+        cat.fontface = "bold",
+        cat.default.pos = "outer")
+```
+
+
+
+
+Abundance plot in all samples
+```{r}
+library(microbiome)
+library(dplyr)
+pseq <- phylo_abs_ITS %>% aggregate_taxa(level = "Phylum")
+# ps1.com.fam <- aggregate_top_taxa(pseq, "Phylum", top = 10) : function is deprecated
+
+ps1.com.fam <- names(sort(taxa_sums(pseq), decreasing = TRUE))[1:10]
+ps1.com.fam <- prune_taxa(ps1.com.fam, pseq)
+
+plot_bar(ps1.com.fam, "Phylum", fill="Phylum", facet_grid=Compartment~Type)
+```
+
+Abudance plots (top phyla & genera) in roots and close rhizosphere samples
+```{r}
+pseq_roots <- phylo_roots %>% aggregate_taxa(level = "Phylum")
+#ps1.com.fam_roots <- microbiome::aggregate_top_taxa(pseq_roots, "Phylum", top = 10)
+
+ps1.com.fam_roots <- names(sort(taxa_sums(pseq_roots), decreasing = TRUE))[1:10]
+ps1.com.fam_roots <- prune_taxa(ps1.com.fam_roots, pseq_roots)
+
+taxa_abundance_table_phylum_roots <- psmelt(ps1.com.fam_roots)
+
+StackedBarPlot_phylum <- taxa_abundance_table_phylum_roots %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Absolute Abundance",
+       title = "Phylum Absolute Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum
+
+#Create a boxplot to show differences in composition of each phylum per Type
+
+phyloseq::psmelt(ps1.com.fam_roots) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free") + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of 10 fungal phyla in roots and close rhizosphere")
+
+# Transform Taxa counts to relative abundance for nice abundance plots
+ps1_roots_phylum_relabun <- transform_sample_counts(ps1.com.fam_roots, function(OTU) OTU/sum(OTU) * 100)
+taxa_abundance_table_phylum_roots_rel <- psmelt(ps1_roots_phylum_relabun)
+
+StackedBarPlot_phylum_rel <- taxa_abundance_table_phylum_roots_rel %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Phylum Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum_rel
+
+############### GENUS ####################
+
+pseq_roots_genus <- phylo_roots %>% aggregate_taxa(level = "Genus")
+#ps1._roots_genus_top10 <- microbiome::aggregate_top_taxa(pseq_roots_genus, "Genus", top = 10)
+
+ps1._roots_genus_top10 <- names(sort(taxa_sums(pseq_roots_genus), decreasing = TRUE))[1:10]
+ps1._roots_genus_top10 <- prune_taxa(ps1._roots_genus_top10, pseq_roots_genus)
+
+taxa_abundance_table_genus_roots <- psmelt(ps1._roots_genus_top10)
+
+StackedBarPlot_genus_roots <- taxa_abundance_table_genus_roots %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Genus Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+
+StackedBarPlot_genus_roots
+
+#Boxplot
+
+phyloseq::psmelt(ps1._roots_genus_top10) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free")  + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of fungal genera in roots and close rhizosphere")
+
+```
+
+Abudance plots (top phyla & genera) in distant rhizosphere samples
+```{r}
+pseq_soil <- phylo_soil %>% aggregate_taxa(level = "Phylum")
+#ps1.com.fam_soil <- microbiome::aggregate_top_taxa(pseq_soil, "Phylum", top = 10)
+
+ps1.com.fam_soil <- names(sort(taxa_sums(pseq_soil), decreasing = TRUE))[1:10]
+ps1.com.fam_soil <- prune_taxa(ps1.com.fam_soil, pseq_soil)
+
+
+taxa_abundance_table_phylum_soil <- psmelt(ps1.com.fam_soil)
+
+StackedBarPlot_phylum <- taxa_abundance_table_phylum_soil %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Absolute Abundance",
+       title = "Phylum Absolute Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum
+
+#Create a boxplot to show differences in composition of each phylum per Type
+
+phyloseq::psmelt(ps1.com.fam_soil) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free") + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of top fungal phyla in distant rhizosphere")
+
+# Transform Taxa counts to relative abundance for nice abundance plots
+ps1_soil_phylum_relabun <- transform_sample_counts(ps1.com.fam_soil, function(OTU) OTU/sum(OTU) * 100)
+taxa_abundance_table_phylum_soil_rel <- psmelt(ps1_soil_phylum_relabun)
+
+StackedBarPlot_phylum_rel <- taxa_abundance_table_phylum_soil_rel %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Phylum Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum_rel
+
+########### GENUS ###########
+
+pseq_soil_genus <- phylo_soil %>% aggregate_taxa(level = "Genus")
+#ps1._soil_genus_top10 <- microbiome::aggregate_top_taxa(pseq_soil_genus, "Genus", top = 10)
+
+ps1._soil_genus_top10 <- names(sort(taxa_sums(pseq_soil_genus), decreasing = TRUE))[1:10]
+ps1._soil_genus_top10 <- prune_taxa(ps1._soil_genus_top10, pseq_soil_genus)
+
+
+taxa_abundance_table_genus_soil <- psmelt(ps1._soil_genus_top10)
+
+StackedBarPlot_genus_soil <- taxa_abundance_table_genus_soil %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Genus Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+
+StackedBarPlot_genus_soil
+
+#Boxplot
+
+phyloseq::psmelt(ps1._soil_genus_top10) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free") + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of fungal genera in distant rhizosphere")
+```
+
+Abudance plots (top phyla & genera) in unplanted samples
+```{r}
+pseq_unplanted <- phylo_unplanted %>% aggregate_taxa(level = "Phylum")
+#ps1.com.fam_unplanted <- microbiome::aggregate_top_taxa(pseq_unplanted, "Phylum", top = 10)
+
+ps1.com.fam_unplanted <- names(sort(taxa_sums(pseq_unplanted), decreasing = TRUE))[1:10]
+ps1.com.fam_unplanted <- prune_taxa(ps1.com.fam_unplanted, pseq_unplanted)
+
+
+taxa_abundance_table_phylum_unplanted <- psmelt(ps1.com.fam_unplanted)
+
+StackedBarPlot_phylum <- taxa_abundance_table_phylum_unplanted %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Absolute Abundance",
+       title = "Phylum Absolute Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum
+
+#Create a boxplot to show differences in composition of each phylum per Type
+
+phyloseq::psmelt(ps1.com.fam_unplanted) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free") + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of top fungal phyla in unplanted soils")
+
+# Transform Taxa counts to relative abundance for nice abundance plots
+ps1_unplanted_phylum_relabun <- transform_sample_counts(ps1.com.fam_unplanted, function(OTU) OTU/sum(OTU) * 100)
+taxa_abundance_table_phylum_unplanted_rel <- psmelt(ps1_unplanted_phylum_relabun)
+
+StackedBarPlot_phylum_rel <- taxa_abundance_table_phylum_unplanted_rel %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Phylum Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+StackedBarPlot_phylum_rel
+############# GENUS ################
+
+pseq_unplanted_genus <- phylo_unplanted %>% aggregate_taxa(level = "Genus")
+#ps1._unplanted_genus_top10 <- microbiome::aggregate_top_taxa(pseq_unplanted_genus, "Genus", top = 10)
+
+ps1._unplanted_genus_top10 <- names(sort(taxa_sums(pseq_unplanted_genus), decreasing = TRUE))[1:10]
+ps1._unplanted_genus_top10 <- prune_taxa(ps1._unplanted_genus_top10, pseq_unplanted_genus)
+
+
+taxa_abundance_table_genus_unplanted <- psmelt(ps1._unplanted_genus_top10)
+
+StackedBarPlot_genus_unplanted <- taxa_abundance_table_genus_unplanted %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
+       y = "Relative Abundance",
+       title = "Genus Relative Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  )
+
+StackedBarPlot_genus_unplanted
+
+#Boxplot
+
+phyloseq::psmelt(ps1._unplanted_genus_top10) %>%
+ggplot(data = ., aes(x = Type, y = Abundance)) +
+  geom_boxplot(outlier.shape  = NA) +
+  geom_jitter(aes(color = OTU), height = 0, width = .2) +
+  labs(x = "", y = "Abundance\n") +
+  facet_wrap(~ OTU, scales = "free") + guides(col = FALSE) +theme_classic() +theme(axis.text.x=element_text(size=8, angle=45,hjust=1)) + ggtitle(label = "Abundance of fungal genera in unplanted soils")
+```
+
+What is the diversity within samples like? --> calculate alpha-diversity
+
+The following is much inspired by https://www.nicholas-ollberding.com/post/introduction-to-the-statistical-analysis-of-microbiome-data-in-r/
+
+The measurement of alpha-diversity is never 100% accurate, as (1) richness is always underestimated due to inexhaustive sampling and (2) rare taxa cannot be accounted for, as with NGS, singletons are eliminated from the beginning, as they could be just sequencing errors.
+In order to compare the index between samples (they will have similar error rates) and so that sequencing depth doesn't interfere, it is recommended to rarefy the data.
+Rarefaction is the subsampling of your reads without replacement to a same sequencing depth (=number of reads).
+
+Before rarefying, plotting Total Reads VS Observed Richness can be interesting. It seems logical that the more reads in a sample, the more potential diversity can be observed.  
+
+In the following paragraphs, the term "reads" is used, but it is really referring to "copies", as reads have been converted to copies, in the otu_biom.
+
+```{r}
+ggplot(data = data.frame("total_reads" =  phyloseq::sample_sums(phylo_abs_ITS),
+"observed" = phyloseq::estimate_richness(phylo_abs_ITS, measures = "Observed")[, 1]),
+aes(x = total_reads, y = observed)) + geom_point() + geom_smooth(method="lm", se = FALSE)+ labs(x = "\nTotal Reads", y = "Observed Richness\n")
+
+#Draw the rarefaction curve for phylo_abs_ITS
+
+#remotes::install_github("mahendra-mariadassou/phyloseq-extended", ref = "dev")
+library(phyloseq.extended)
+
+p<-ggrare(phylo_abs_ITS, step=100, color = "Compartment", label = "X.SampleID", se = FALSE)
+p<-p + labs(title="Rarefaction curve", subtitle =  "miPEP ITS samples")
+p<-p+scale_color_manual(values = c("dark blue", "dark orange", "dark red"))
+p<-p+theme_minimal()
+p <- p + facet_wrap(~Compartment) 
+p
+
+# The samples have plateaued, however it is difficult to choose a sample.size just looking at this graph.
+
+reads_soil <- sample_sums(phylo_soil)
+min_reads_soil <- min(reads_soil)
+min_reads_soil
+#[1] 764 048 corresponds to aS4, the next lowest is at 1 254 140 aS2: this will be the rarefaction limit, to not loose any more samples. The two higest samples are up to 20M.
+
+reads_roots <- sample_sums(phylo_roots)
+min_reads_roots <- min(reads_roots)
+min_reads_roots
+#[1] 2525 corresponds to bR7, the next lowest is 31 281 (bR3) so it will be the rarefaction limit.
+
+reads_unplanted <- sample_sums(phylo_unplanted)
+min_reads_unplanted <- min(reads_unplanted)
+min_reads_unplanted
+# 502744 = ctrlSN2,keep this rarefaction limit as many are around that number.
+
+# Rarefying to a certain sample.size, is often reducing sequencing depth to the smallest sample. But if some samples are really small (low number of reads), it can be better to discard those samples and rarefy at a higher size. "rngseed" allows to set a seed, meaning that this code is reproducible (normally the random rarefaction will change everytime the code is run!). "replace=FALSE" means that when a read is sampled it is not replaced in the pool of reads (https://www.thoughtco.com/sampling-with-or-without-replacement-3126563).
+
+#sometimes the rarefaction process takes up too much memory: restart R and only run the essential scripts prior to rarefaction and then do it
+
+# Roots samples 
+phylo_rar_roots <- phyloseq::rarefy_even_depth(phylo_roots, sample.size = 31281, rngseed = 711, replace = FALSE)
+
+testit <- function(x)
+{
+    p1 <- proc.time()
+    Sys.sleep(x)
+    proc.time() - p1 # The cpu usage should be negligible
+}
+testit(10)
+
+# Soil samples
+phylo_rar_soil <- phyloseq::rarefy_even_depth(phylo_soil, sample.size = 1254140 , rngseed = 711, replace = FALSE)
+
+testit(10)
+# unplanted samples
+phylo_rar_unplanted <- phyloseq::rarefy_even_depth(phylo_unplanted, sample.size = 502744 , rngseed = 711, replace = FALSE)
+
+#lower samples are automatically removed from the analysis
+```
+
+Alpha-diversity in root samples ...
+```{r}
+p_Div_roots=plot_richness(phylo_rar_roots, color="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+
+p_Div_roots_bp=p_Div_roots+geom_boxplot(aes(color=Type), alpha=0.2)+ theme_classic()+xlab("Alpha-diversity in roots and close rhizosphere")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))
+
+p_Div_roots_bp
+
+# en noir et blanc avec des formes
+p_Div_roots=plot_richness(phylo_rar_roots, shape="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+p_Div_roots_bp_nb <- p_Div_roots+geom_boxplot(aes(shape=Type), alpha=0.2) + scale_shape_manual(values=c(0,1,2,3,19,15,8))+ theme_classic()+xlab("Alpha-diversity in roots and close rhizosphere samples")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))
+p_Div_roots_bp_nb
+
+#Statistical analyses: be careful, if updating code: this part has to be manually (export/import)
+
+alpha.diversity_roots=estimate_richness(phylo_rar_roots, measures=c("Observed","Shannon", "Simpson"))
+
+#write.table(alpha.diversity_roots, ("indice_diversite_roots.txt"))
+
+#Add a "Type" column and re-import as Text(readr)
+
+library(readr)
+indice_diversite_roots <-read_delim("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/indice_diversite_roots_1.txt","\t", escape_double = FALSE, trim_ws = TRUE)
+
+indice_diversite_roots$Type <- as.factor(indice_diversite_roots$Type)
+str(object = indice_diversite_roots$Type)
+indice_diversite_roots$Type <- relevel(indice_diversite_roots$Type, ref="Control-mi-PEP")
+
+fit1 <-lm(Observed~Type, data=indice_diversite_roots)
+hist(fit1$residuals) #suit une loi normale?
+shapiro.test(fit1$residuals)# si p-value > 0,05 alors la distribution n'est pas significativement différente d'une distribution normale
+summary(fit1)
+
+fit2 <-lm(Shannon~Type, data=indice_diversite_roots)
+hist(fit2$residuals) #suit une loi normale?
+shapiro.test(fit2$residuals)
+summary(fit2)
+
+fit3 <-lm(Simpson~Type, data=indice_diversite_roots)
+hist(fit3$residuals) #suit une loi normale? if not normal try a GLM
+shapiro.test(fit3$residuals)
+glm_fit3 <- glm(Simpson~Type, data=indice_diversite_roots) #link="inverse" by default
+summary(glm_fit3)
+```
+
+Alpha-diversity in soil samples ...
+```{r}
+p_Div_soil=plot_richness(phylo_rar_soil, color="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+
+p_Div_soil_bp=p_Div_soil+geom_boxplot(aes(color=Type), alpha=0.2)+ theme_classic()+xlab("Alpha-diversity in distant rhizosphere")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))
+
+p_Div_soil_bp
+
+# en noir et blanc avec des formes
+p_Div_soil=plot_richness(phylo_rar_soil, shape="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+p_Div_soil_bp_nb <- p_Div_soil+geom_boxplot(aes(shape=Type), alpha=0.2) + scale_shape_manual(values=c(0,1,2,3,19,15,8))+ theme_classic()+xlab("Alpha-diversity in distant rhizosphere samples")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))
+p_Div_soil_bp_nb
+
+#Statistical analyses: be careful, if updating code: this part has to be manually (export/import)
+
+alpha.diversity_soil=estimate_richness(phylo_rar_soil, measures=c("Observed","Shannon", "Simpson"))
+
+#write.table(alpha.diversity_soil, ("indice_diversite_soil.txt"))
+
+#Add a "Type" column and re-import as Text(readr)
+
+library(readr)
+indice_diversite_soil <-read_delim("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/indice_diversite_soil_1.txt","\t", escape_double = FALSE, trim_ws = TRUE)
+
+indice_diversite_soil$Type <- as.factor(indice_diversite_soil$Type)
+str(object = indice_diversite_soil$Type)
+indice_diversite_soil$Type <- relevel(indice_diversite_soil$Type, ref="Control-mi-PEP")
+
+fit1 <-lm(Observed~Type, data=indice_diversite_soil)
+hist(fit1$residuals) #suit une loi normale?
+shapiro.test(fit1$residuals)# si p-value > 0,05 alors la distribution n'est pas significativement différente d'une distribution normale
+summary(fit1)
+
+fit2 <-lm(Shannon~Type, data=indice_diversite_soil)
+hist(fit2$residuals) #suit une loi normale?
+shapiro.test(fit2$residuals)
+glm_fit2 <- glm(Shannon~Type, data=indice_diversite_soil) #link="inverse" by default
+summary(glm_fit2)
+
+fit3 <-lm(Simpson~Type, data=indice_diversite_soil)
+hist(fit3$residuals) #suit une loi normale? if not normal try a GLM
+shapiro.test(fit3$residuals)
+glm_fit3 <- glm(Simpson~Type, data=indice_diversite_soil) #link="inverse" by default
+summary(glm_fit3)
+```
+
+Alpha-diversity in unplanted soils...
+```{r}
+p_Div_unplanted=plot_richness(phylo_rar_unplanted, color="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+
+p_Div_unplanted_bp=p_Div_unplanted+geom_boxplot(aes(color=Type), alpha=0.2)+ theme_classic()+xlab("Alpha-diversity in unplanted samples")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))
+
+p_Div_unplanted_bp
+
+# en noir et blanc avec des formes
+p_Div_unplanted=plot_richness(phylo_rar_unplanted, shape="Type", x="Type", measures=c("Observed", "Shannon", "Simpson"))
+p_Div_unplanted_bp_nb <- p_Div_unplanted+geom_boxplot(aes(shape=Type), alpha=0.2) + scale_shape_manual(values=c(0,1,2,3,19,15,8))+ theme_classic()+xlab("Alpha-diversity in unplanted samples")+ylab("Observed ASVs richness")+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))
+p_Div_unplanted_bp_nb
+
+#Statistical analyses: be careful, if updating code: this part has to be manually (export/import)
+
+alpha.diversity_unplanted=estimate_richness(phylo_rar_unplanted, measures=c("Observed","Shannon", "Simpson"))
+
+#write.table(alpha.diversity_unplanted, ("indice_diversite_unplanted.txt"))
+
+#Add a "Type" column and re-import as Text(readr)
+
+library(readr)
+indice_diversite_unplanted <-read_delim("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/indice_diversite_unplanted_1.txt","\t", escape_double = FALSE, trim_ws = TRUE)
+
+indice_diversite_unplanted$Type <- as.factor(indice_diversite_unplanted$Type)
+str(object = indice_diversite_unplanted$Type)
+indice_diversite_unplanted$Type <- relevel(indice_diversite_unplanted$Type, ref="Control-mi-PEP")
+
+fit1 <-lm(Observed~Type, data=indice_diversite_unplanted)
+hist(fit1$residuals) #suit une loi normale?
+shapiro.test(fit1$residuals)# si p-value > 0,05 alors la distribution n'est pas significativement différente d'une distribution normale
+glm_fit1 <- glm(Observed~Type, data=indice_diversite_unplanted) #link="inverse" by default
+summary(glm_fit1)
+
+fit2 <-lm(Shannon~Type, data=indice_diversite_unplanted)
+hist(fit2$residuals) #suit une loi normale?
+shapiro.test(fit2$residuals)
+glm_fit2 <- glm(Shannon~Type, data=indice_diversite_unplanted) #link="inverse" by default
+summary(glm_fit2)
+
+fit3 <-lm(Simpson~Type, data=indice_diversite_unplanted)
+hist(fit3$residuals) #suit une loi normale? if not normal try a GLM
+shapiro.test(fit3$residuals)
+glm_fit3 <- glm(Simpson~Type, data=indice_diversite_unplanted) #link="inverse" by default
+summary(glm_fit3)
+```
+
+Bray-Curtis in root samples...
+```{r}
+set.seed(711)
+
+PCOA_Bray_roots <- ordinate(physeq = phylo_roots, method = "PCoA", distance="bray") 
+PCOA_Bray_roots 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_roots <- otu_table(phylo_roots)
+rda <- rda(otu_roots) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the first 3 axes are ok
+
+
+bc_roots <- plot_ordination(physeq = phylo_roots, ordination=PCOA_Bray_roots, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+bc_roots <- bc_roots + ggtitle("Bray-Curtis distances based PCoA of roots and close rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+bc_roots
+
+# en noir et blanc avec des formes
+
+bc_roots_nb <- plot_ordination(physeq = phylo_roots, ordination=PCOA_Bray_roots, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+bc_roots_nb  + ggtitle("Bray-Curtis distances based PCoA of roots and close rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+
+#Statistical analysis: permanova & beta-disper test
+# Calculate bray curtis distance matrix
+bray_roots <- phyloseq::distance(phylo_roots, method = "bray")
+sampledf_roots <- data.frame(sample_data(phylo_roots))
+adonis(bray_roots ~ Type, data = sampledf_roots)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_roots = betadisper(bray_roots, sampledf_roots$Type)
+permutest(Disper_Type_roots, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+#### Pairwise multilevel comparison using adonis #####
+library(devtools)
+#install_github("pmartinezarbizu/pairwiseAdonis/pairwiseAdonis") 
+
+pairwise.adonis <- function(x,factors, sim.function = 'vegdist', sim.method = 'bray', p.adjust.m ='bonferroni',reduce=NULL,perm=999)
+{
+  
+  co <- combn(unique(as.character(factors)),2)
+  pairs <- c()
+  Df <- c()
+  SumsOfSqs <- c()
+  F.Model <- c()
+  R2 <- c()
+  p.value <- c()
+  
+  
+  for(elem in 1:ncol(co)){
+    if(inherits(x, 'dist')){
+      x1=as.matrix(x)[factors %in% c(as.character(co[1,elem]),as.character(co[2,elem])),
+                      factors %in% c(as.character(co[1,elem]),as.character(co[2,elem]))]
+    }
+    
+    else  (
+      if (sim.function == 'daisy'){
+        x1 = daisy(x[factors %in% c(co[1,elem],co[2,elem]),],metric=sim.method)
+      } 
+      else{x1 = vegdist(x[factors %in% c(co[1,elem],co[2,elem]),],method=sim.method)}
+    )
+    
+    ad <- adonis(x1 ~ factors[factors %in% c(co[1,elem],co[2,elem])],
+                 permutations = perm);
+    pairs <- c(pairs,paste(co[1,elem],'vs',co[2,elem]));
+    Df <- c(Df,ad$aov.tab[1,1])
+    SumsOfSqs <- c(SumsOfSqs, ad$aov.tab[1,2])
+    F.Model <- c(F.Model,ad$aov.tab[1,4]);
+    R2 <- c(R2,ad$aov.tab[1,5]);
+    p.value <- c(p.value,ad$aov.tab[1,6])
+  }
+  p.adjusted <- p.adjust(p.value,method=p.adjust.m)
+  
+  sig = c(rep('',length(p.adjusted)))
+  sig[p.adjusted <= 0.05] <-'.'
+  sig[p.adjusted <= 0.01] <-'*'
+  sig[p.adjusted <= 0.001] <-'**'
+  sig[p.adjusted <= 0.0001] <-'***'
+  pairw.res <- data.frame(pairs,Df,SumsOfSqs,F.Model,R2,p.value,p.adjusted,sig)
+  
+  if(!is.null(reduce)){
+    pairw.res <- subset (pairw.res, grepl(reduce,pairs))
+    pairw.res$p.adjusted <- p.adjust(pairw.res$p.value,method=p.adjust.m)
+    
+    sig = c(rep('',length(pairw.res$p.adjusted)))
+    sig[pairw.res$p.adjusted <= 0.1] <-'.'
+    sig[pairw.res$p.adjusted <= 0.05] <-'*'
+    sig[pairw.res$p.adjusted <= 0.01] <-'**'
+    sig[pairw.res$p.adjusted <= 0.001] <-'***'
+    pairw.res <- data.frame(pairw.res[,1:7],sig)
+  }
+  class(pairw.res) <- c("pwadonis", "data.frame")
+  return(pairw.res)
+} 
+
+
+### Method summary
+summary.pwadonis = function(object, ...) {
+  cat("Result of pairwise.adonis:\n")
+  cat("\n")
+  print(object, ...)
+  cat("\n")
+  cat("Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n")
+}
+
+
+pairwise.adonis(bray_roots, sampledf_roots$Type)
+```
+
+Bray-Curtis in soil samples...
+```{r}
+set.seed(711)
+PCOA_Bray_soil <- ordinate(physeq = phylo_soil, method = "PCoA", distance="bray")
+PCOA_Bray_soil 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_soil <- otu_table(phylo_soil)
+rda <- rda(otu_soil) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the 3 first axes are > random
+
+
+bc_soil <- plot_ordination(physeq = phylo_soil, ordination=PCOA_Bray_soil, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+bc_soil <- bc_soil + ggtitle("Bray-Curtis distances based PCoA of distant rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+bc_soil
+
+# en noir et blanc avec des formes
+bc_soil_nb <- plot_ordination(physeq = phylo_soil, ordination=PCOA_Bray_soil, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+bc_soil_nb <- bc_soil_nb  + ggtitle("Bray-Curtis distances based PCoA of distant rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+bc_soil_nb
+
+#Statistical analysis: permanova & beta-disper test
+# Calculate bray curtis distance matrix
+bray_soil <- phyloseq::distance(phylo_soil, method = "bray")
+sampledf_soil <- data.frame(sample_data(phylo_soil))
+adonis(bray_soil ~ Type, data = sampledf_soil)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_soil = betadisper(bray_soil, sampledf_soil$Type)
+permutest(Disper_Type_soil, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+pairwise.adonis(bray_soil, sampledf_soil$Type)
+
+```
+
+Bray-Curtis in unplanted samples...
+```{r}
+set.seed(711)
+PCOA_Bray_unplanted <- ordinate(physeq = phylo_unplanted, method = "PCoA", distance="bray") 
+PCOA_Bray_unplanted 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_unplanted <- otu_table(phylo_unplanted)
+rda <- rda(otu_unplanted) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the 2nd axis is not interpretable
+
+bc_unplanted <- plot_ordination(physeq = phylo_unplanted, ordination=PCOA_Bray_unplanted, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+bc_unplanted <- bc_unplanted + ggtitle("Bray-Curtis distances based PCoA of unplanted soil fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+bc_unplanted
+
+# en noir et blanc avec des formes
+bc_unplanted_nb <- plot_ordination(physeq = phylo_unplanted, ordination=PCOA_Bray_unplanted, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+bc_unplanted_nb <- bc_unplanted_nb  + ggtitle("Bray-Curtis distances based PCoA of unplanted soil fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+bc_unplanted_nb
+
+#Statistical analysis: permanova & beta-disper test
+# Calculate bray curtis distance matrix
+bray_unplanted <- phyloseq::distance(phylo_unplanted, method = "bray")
+sampledf_unplanted <- data.frame(sample_data(phylo_unplanted))
+adonis(bray_unplanted ~ Type, data = sampledf_unplanted)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_unplanted = betadisper(bray_unplanted, sampledf_unplanted$Type)
+permutest(Disper_Type_unplanted, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+pairwise.adonis(bray_unplanted, sampledf_unplanted$Type)
+```
+
+Weighted UniFrac : first, add phylogenetic tree
+```{r}
+library("ape")
+library(magrittr)
+
+pick_new_outgroup <- function(tree.unrooted){
+  require("magrittr")
+  require("data.table")
+  require("ape") # ape::Ntip
+  # tablify parts of tree that we need.
+  treeDT <-
+    cbind(
+      data.table(tree.unrooted$edge),
+      data.table(length = tree.unrooted$edge.length)
+    )[1:Ntip(tree.unrooted)] %>%
+    cbind(data.table(id = tree.unrooted$tip.label))
+  # Take the longest terminal branch as outgroup
+  new.outgroup <- treeDT[which.max(length)]$id
+  return(new.outgroup) }
+  
+tree <- read.tree("~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/tree/tree.fasttree")
+tree
+my.tree <- phy_tree(tree)
+out.group <- pick_new_outgroup(my.tree)
+out.group #ex : [1] "3312"
+new.tree <- ape::root(my.tree, outgroup=out.group, resolve.root=TRUE)#root tree to always have the same PCoA at each re-run
+new.tree
+#use the latest phyloseq info (-c2R, c7R, ctrlS6)
+phylo_for_UniFrac <- phyloseq(tax_table,OTU_table,samples_final, new.tree)
+phylo_for_UniFrac
+```
+
+Subsample the UniFrac phyloseq object
+```{r}
+correct.order <- c("miPEP-A","miPEP-B","miPEP-C","Control-mi-PEP")
+sample_data(phylo_for_UniFrac)$Type <- factor(sample_data(phylo_for_UniFrac)$Type, levels = correct.order)
+levels(get_variable(phylo_for_UniFrac, "Type")) #mettre dans le bon ordre
+
+phylo_for_UniFrac_soil <- subset_samples(phylo_for_UniFrac, Compartment=="SOL")
+phylo_for_UniFrac_roots <- subset_samples(phylo_for_UniFrac, Compartment=="RACINE")
+phylo_for_UniFrac_unplanted <- subset_samples(phylo_for_UniFrac, Compartment=="SOL.NU")
+```
+
+
+Weighted UniFrac in root samples...
+```{r}
+set.seed(711)
+PCOA_weighted_roots <- ordinate(physeq = phylo_for_UniFrac_roots,  method = "PCoA", distance="unifrac", weighted=TRUE) 
+PCOA_weighted_roots 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_w_roots <- otu_table(phylo_for_UniFrac_roots)
+rda <- rda(otu_w_roots) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the 3 first axes are > random
+
+
+WUF_roots <- plot_ordination(physeq = phylo_for_UniFrac_roots, ordination=PCOA_weighted_roots, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+WUF_roots <- WUF_roots + ggtitle("Weighted UniFrac distances based PCoA of roots and close rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+WUF_roots
+
+# en noir et blanc avec des formes
+WUF_roots_nb <- plot_ordination(physeq = phylo_for_UniFrac_roots, ordination=PCOA_weighted_roots, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+WUF_roots_nb <- WUF_roots_nb  + ggtitle("Weighted UniFrac distances based PCoA of roots and close rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+
+#Statistical analysis: permanova & beta-disper test
+
+# Calculate distance matrix
+WUF_roots <- phyloseq::distance(phylo_for_UniFrac_roots, method = "unifrac", weighted=TRUE)
+sampledf_roots <- data.frame(sample_data(phylo_for_UniFrac_roots))
+adonis(WUF_roots ~ Type, data = sampledf_roots)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_roots = betadisper(WUF_roots, sampledf_roots$Type)
+permutest(Disper_Type_roots, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+pairwise.adonis(WUF_roots, sampledf_roots$Type)
+```
+
+Weighted UniFrac in soil samples...
+```{r}
+set.seed(711)
+PCOA_weighted_soil <- ordinate(physeq = phylo_for_UniFrac_soil,  method = "PCoA", distance="unifrac", weighted=TRUE) 
+PCOA_weighted_soil 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_w_soil <- otu_table(phylo_for_UniFrac_soil)
+rda <- rda(otu_w_soil) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the 3 first axes are > random
+
+
+WUF_soil <- plot_ordination(physeq = phylo_for_UniFrac_soil, ordination=PCOA_weighted_soil, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+WUF_soil <- WUF_soil + ggtitle("Weighted UniFrac distances based PCoA of distant rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+WUF_soil
+
+# en noir et blanc avec des formes
+WUF_soil_nb <- plot_ordination(physeq = phylo_for_UniFrac_soil, ordination=PCOA_weighted_soil, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+WUF_soil_nb <- WUF_soil_nb  + ggtitle("Weighted UniFrac distances based PCoA of distant rhizospheric fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+
+#Statistical analysis: permanova & beta-disper test
+
+# Calculate distance matrix
+WUF_soil <- phyloseq::distance(phylo_for_UniFrac_soil, method = "unifrac", weighted=TRUE)
+sampledf_soil <- data.frame(sample_data(phylo_for_UniFrac_soil))
+adonis(WUF_soil ~ Type, data = sampledf_soil)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_soil = betadisper(WUF_soil, sampledf_soil$Type)
+permutest(Disper_Type_soil, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+pairwise.adonis(WUF_soil, sampledf_soil$Type)
+```
+
+Weighted UniFrac in unplanted samples...
+```{r}
+set.seed(711)
+PCOA_weighted_unplanted <- ordinate(physeq = phylo_for_UniFrac_unplanted,  method = "PCoA", distance="unifrac", weighted=TRUE) 
+PCOA_weighted_unplanted 
+# The 2 main axes: Relative_eig has to be > Broken_stick, i.e. more than just random interpretation OR at least cumul eig > cumul broken stick
+otu_w_unplanted <- otu_table(phylo_for_UniFrac_unplanted)
+rda <- rda(otu_w_unplanted) #raw data without the sample column which conflicts w/rda
+screeplot(rda, bstick=TRUE)
+#This graph shows that the 2nd axis is random
+
+WUF_unplanted <- plot_ordination(physeq = phylo_for_UniFrac_unplanted, ordination=PCOA_weighted_unplanted, color="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))+stat_ellipse()
+WUF_unplanted <- WUF_unplanted + ggtitle("Weighted UniFrac distances based PCoA of unplanted soil fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+WUF_unplanted
+
+# en noir et blanc avec des formes
+WUF_unplanted_nb <- plot_ordination(physeq = phylo_for_UniFrac_unplanted, ordination=PCOA_weighted_unplanted, shape="Type")+ theme_classic()+ theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+scale_shape_manual(values=c(0,1,2,3,19,15,8))+stat_ellipse()
+WUF_unplanted_nb <- WUF_unplanted_nb  + ggtitle("Weighted UniFrac distances based PCoA of unplanted soil fungal communities") +theme(plot.title = element_text(size = 8, face = "bold"))
+
+#Statistical analysis: permanova & beta-disper test
+
+# Calculate distance matrix
+WUF_unplanted <- phyloseq::distance(phylo_for_UniFrac_unplanted, method = "unifrac", weighted=TRUE)
+sampledf_unplanted <- data.frame(sample_data(phylo_for_UniFrac_unplanted))
+adonis(WUF_unplanted ~ Type, data = sampledf_unplanted)
+
+# If Type has a significant effect, check group dispersion
+Disper_Type_unplanted = betadisper(WUF_unplanted, sampledf_unplanted$Type)
+permutest(Disper_Type_unplanted, pairwise=TRUE, permutations=1000)
+
+#If the dispersion test is signif, it means that the Type effect is acutally only due to group dispersion, and not a real biological effect
+
+pairwise.adonis(WUF_unplanted, sampledf_unplanted$Type)
+
+```
+
+Another type of analysis is to look at specific OTUs/ASVs that are specifically enriched or depleted in certain sample Types 
+
+1) Root samples
+```{r}
+library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_roots <- phyloseq_to_deseq2(phylo_roots, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_roots$Type <- relevel(ds2_roots$Type, ref = "Control-mi-PEP")
+
+#calculate geometric means prior to estimate size factors
+gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
+geoMeans = apply(counts(ds2_roots), 1, gm_mean)
+ds2_roots= estimateSizeFactors(ds2_roots, geoMeans = geoMeans)
+
+dds_roots <- DESeq(ds2_roots, test="Wald", fitType="parametric")
+
+##miPEP-A##
+
+res_roots_miPEPa <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_roots_miPEPa_order = res_roots_miPEPa[order(res_roots_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_roots_miPEPa = res_roots_miPEPa_order[which(res_roots_miPEPa_order$padj < alpha),]
+sigtab_roots_miPEPa_top_47 <- sigtab_roots_miPEPa[c(1:47),] # select the 47 ASV with lowest p-adj
+sigtab_roots_miPEPa_top_47 = cbind(as(sigtab_roots_miPEPa_top_47, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPa_top_47), ], "matrix"))
+dim(sigtab_roots_miPEPa_top_47)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_roots_miPEPa_top_47$log2FoldChange, sigtab_roots_miPEPa_top_47$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPa_top_47$Phylum = factor(as.character(sigtab_roots_miPEPa_top_47$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_roots_miPEPa_top_47$log2FoldChange, sigtab_roots_miPEPa_top_47$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPa_top_47$Genus = factor(as.character(sigtab_roots_miPEPa_top_47$Genus), levels=names(x))
+plot_miPEPa_roots <- ggplot(sigtab_roots_miPEPa_top_47, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 47 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in roots and close rhizosphere")
+plot_miPEPa_roots
+
+##miPEP-B##
+
+res_roots_miPEPb <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_roots_miPEPb_order = res_roots_miPEPb[order(res_roots_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_roots_miPEPb = res_roots_miPEPb_order[which(res_roots_miPEPb_order$padj < alpha),]
+sigtab_roots_miPEPb_top_45 <- sigtab_roots_miPEPb[c(1:45),] # select the 45 ASV with lowest p-adj
+sigtab_roots_miPEPb_top_45 = cbind(as(sigtab_roots_miPEPb_top_45, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPb_top_45), ], "matrix"))
+dim(sigtab_roots_miPEPb_top_45)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_roots_miPEPb_top_45$log2FoldChange, sigtab_roots_miPEPb_top_45$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPb_top_45$Phylum = factor(as.character(sigtab_roots_miPEPb_top_45$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_roots_miPEPb_top_45$log2FoldChange, sigtab_roots_miPEPb_top_45$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPb_top_45$Genus = factor(as.character(sigtab_roots_miPEPb_top_45$Genus), levels=names(x))
+plot_miPEPb_roots <- ggplot(sigtab_roots_miPEPb_top_45, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 45 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in roots and close rhizosphere")
+plot_miPEPb_roots
+
+##miPEP-C##
+
+res_roots_miPEPc <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_roots_miPEPc_order = res_roots_miPEPc[order(res_roots_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_roots_miPEPc = res_roots_miPEPc_order[which(res_roots_miPEPc_order$padj < alpha),]
+sigtab_roots_miPEPc_top_50 <- sigtab_roots_miPEPc[c(1:50),] # select the 50 ASV with lowest p-adj
+sigtab_roots_miPEPc_top_50 = cbind(as(sigtab_roots_miPEPc_top_50, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPc_top_50), ], "matrix"))
+dim(sigtab_roots_miPEPc_top_50)
+#96 ASVs diff abundant
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_roots_miPEPc_top_50$log2FoldChange, sigtab_roots_miPEPc_top_50$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPc_top_50$Phylum = factor(as.character(sigtab_roots_miPEPc_top_50$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_roots_miPEPc_top_50$log2FoldChange, sigtab_roots_miPEPc_top_50$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_roots_miPEPc_top_50$Genus = factor(as.character(sigtab_roots_miPEPc_top_50$Genus), levels=names(x))
+plot_miPEPc_roots <- ggplot(sigtab_roots_miPEPc_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in roots and close rhizosphere")
+plot_miPEPc_roots
+```
+
+2) Soil samples
+```{r}
+library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_soil <- phyloseq_to_deseq2(phylo_soil, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_soil$Type <- relevel(ds2_soil$Type, ref = "Control-mi-PEP")
+
+#calculate geometric means prior to estimate size factors
+gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
+geoMeans = apply(counts(ds2_soil), 1, gm_mean)
+ds2_soil= estimateSizeFactors(ds2_soil, geoMeans = geoMeans)
+
+dds_soil <- DESeq(ds2_soil, test="Wald", fitType="parametric")
+
+##miPEP-A##
+
+res_soil_miPEPa <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_soil_miPEPa_order = res_soil_miPEPa[order(res_soil_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_soil_miPEPa = res_soil_miPEPa_order[which(res_soil_miPEPa_order$padj < alpha),]
+sigtab_soil_miPEPa_top_50 <- sigtab_soil_miPEPa[c(1:50),] # select the 50 ASV with lowest p-adj
+sigtab_soil_miPEPa_top_50 = cbind(as(sigtab_soil_miPEPa_top_50, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPa_top_50), ], "matrix"))
+dim(sigtab_soil_miPEPa_top_50)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_soil_miPEPa_top_50$log2FoldChange, sigtab_soil_miPEPa_top_50$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPa_top_50$Phylum = factor(as.character(sigtab_soil_miPEPa_top_50$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_soil_miPEPa_top_50$log2FoldChange, sigtab_soil_miPEPa_top_50$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPa_top_50$Genus = factor(as.character(sigtab_soil_miPEPa_top_50$Genus), levels=names(x))
+plot_miPEPa_soil <- ggplot(sigtab_soil_miPEPa_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in distant rhizosphere")
+plot_miPEPa_soil
+
+##miPEP-B##
+
+res_soil_miPEPb <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_soil_miPEPb_order = res_soil_miPEPb[order(res_soil_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_soil_miPEPb = res_soil_miPEPb_order[which(res_soil_miPEPb_order$padj < alpha),]
+sigtab_soil_miPEPb_top_39 <- sigtab_soil_miPEPb[c(1:39),] # select the 39 ASV with lowest p-adj
+sigtab_soil_miPEPb_top_39 = cbind(as(sigtab_soil_miPEPb_top_39, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPb_top_39), ], "matrix"))
+dim(sigtab_soil_miPEPb_top_39)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_soil_miPEPb_top_39$log2FoldChange, sigtab_soil_miPEPb_top_39$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPb_top_39$Phylum = factor(as.character(sigtab_soil_miPEPb_top_39$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_soil_miPEPb_top_39$log2FoldChange, sigtab_soil_miPEPb_top_39$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPb_top_39$Genus = factor(as.character(sigtab_soil_miPEPb_top_39$Genus), levels=names(x))
+plot_miPEPb_soil <- ggplot(sigtab_soil_miPEPb_top_39, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 39 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in distant rhizosphere")
+plot_miPEPb_soil
+
+##miPEP-C##
+
+res_soil_miPEPc <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_soil_miPEPc_order = res_soil_miPEPc[order(res_soil_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_soil_miPEPc = res_soil_miPEPc_order[which(res_soil_miPEPc_order$padj < alpha),]
+sigtab_soil_miPEPc_top_45 <- sigtab_soil_miPEPc[c(1:45),] # select the 45 ASV with lowest p-adj
+sigtab_soil_miPEPc_top_45 = cbind(as(sigtab_soil_miPEPc_top_45, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPc_top_45), ], "matrix"))
+dim(sigtab_soil_miPEPc_top_45)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_soil_miPEPc_top_45$log2FoldChange, sigtab_soil_miPEPc_top_45$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPc_top_45$Phylum = factor(as.character(sigtab_soil_miPEPc_top_45$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_soil_miPEPc_top_45$log2FoldChange, sigtab_soil_miPEPc_top_45$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_soil_miPEPc_top_45$Genus = factor(as.character(sigtab_soil_miPEPc_top_45$Genus), levels=names(x))
+plot_miPEPc_soil <- ggplot(sigtab_soil_miPEPc_top_45, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 45 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in distant rhizosphere")
+plot_miPEPc_soil
+```
+
+3) Unplanted samples
+```{r}
+library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_unplanted <- phyloseq_to_deseq2(phylo_unplanted, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_unplanted$Type <- relevel(ds2_unplanted$Type, ref = "Control-mi-PEP")
+
+#calculate geometric means prior to estimate size factors
+gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
+geoMeans = apply(counts(ds2_unplanted), 1, gm_mean)
+ds2_unplanted= estimateSizeFactors(ds2_unplanted, geoMeans = geoMeans)
+
+dds_unplanted <- DESeq(ds2_unplanted, test="Wald", fitType="parametric")
+
+##miPEP-A##
+
+res_unplanted_miPEPa <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_unplanted_miPEPa_order = res_unplanted_miPEPa[order(res_unplanted_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_unplanted_miPEPa = res_unplanted_miPEPa_order[which(res_unplanted_miPEPa_order$padj < alpha),]
+sigtab_unplanted_miPEPa_top_43 <- sigtab_unplanted_miPEPa[c(1:43),] # select the 43 ASV with lowest p-adj
+sigtab_unplanted_miPEPa_top_43 = cbind(as(sigtab_unplanted_miPEPa_top_43, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPa_top_43), ], "matrix"))
+dim(sigtab_unplanted_miPEPa_top_43)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_unplanted_miPEPa_top_43$log2FoldChange, sigtab_unplanted_miPEPa_top_43$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPa_top_43$Phylum = factor(as.character(sigtab_unplanted_miPEPa_top_43$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_unplanted_miPEPa_top_43$log2FoldChange, sigtab_unplanted_miPEPa_top_43$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPa_top_43$Genus = factor(as.character(sigtab_unplanted_miPEPa_top_43$Genus), levels=names(x))
+plot_miPEPa_unplanted <- ggplot(sigtab_unplanted_miPEPa_top_43, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 43 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in unplanted soils")
+plot_miPEPa_unplanted
+
+##miPEP-B##
+
+res_unplanted_miPEPb <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_unplanted_miPEPb_order = res_unplanted_miPEPb[order(res_unplanted_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_unplanted_miPEPb = res_unplanted_miPEPb_order[which(res_unplanted_miPEPb_order$padj < alpha),]
+sigtab_unplanted_miPEPb_top_48 <- sigtab_unplanted_miPEPb[c(1:48),] # select the 48 ASV with lowest p-adj
+sigtab_unplanted_miPEPb_top_48 = cbind(as(sigtab_unplanted_miPEPb_top_48, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPb_top_48), ], "matrix"))
+dim(sigtab_unplanted_miPEPb_top_48)
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_unplanted_miPEPb_top_48$log2FoldChange, sigtab_unplanted_miPEPb_top_48$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPb_top_48$Phylum = factor(as.character(sigtab_unplanted_miPEPb_top_48$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_unplanted_miPEPb_top_48$log2FoldChange, sigtab_unplanted_miPEPb_top_48$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPb_top_48$Genus = factor(as.character(sigtab_unplanted_miPEPb_top_48$Genus), levels=names(x))
+plot_miPEPb_unplanted <- ggplot(sigtab_unplanted_miPEPb_top_48, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 48 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in unplanted soils")
+plot_miPEPb_unplanted
+
+##miPEP-C##
+
+res_unplanted_miPEPc <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
+res_unplanted_miPEPc_order = res_unplanted_miPEPc[order(res_unplanted_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+
+alpha = 0.001
+sigtab_unplanted_miPEPc = res_unplanted_miPEPc_order[which(res_unplanted_miPEPc_order$padj < alpha),]
+sigtab_unplanted_miPEPc_top_39 <- sigtab_unplanted_miPEPc[c(1:39),] # select the 39 ASV with lowest p-adj
+sigtab_unplanted_miPEPc_top_39 = cbind(as(sigtab_unplanted_miPEPc_top_39, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPc_top_39), ], "matrix"))
+dim(sigtab_unplanted_miPEPc_top_39)
+
+
+########### Graphical representation #####
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab_unplanted_miPEPc_top_39$log2FoldChange, sigtab_unplanted_miPEPc_top_39$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPc_top_39$Phylum = factor(as.character(sigtab_unplanted_miPEPc_top_39$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab_unplanted_miPEPc_top_39$log2FoldChange, sigtab_unplanted_miPEPc_top_39$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab_unplanted_miPEPc_top_39$Genus = factor(as.character(sigtab_unplanted_miPEPc_top_39$Genus), levels=names(x))
+plot_miPEPc_unplanted <- ggplot(sigtab_unplanted_miPEPc_top_39, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 39 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in unplanted soils")
+plot_miPEPc_unplanted
+```
+
+Indicator Species
+
+1) Roots samples
+```{r}
+#library(indicspecies)
+
+# Export the OTU table, with a Sample column, Type column and then ASV & abundances per column
+#OTU_table_phylo_roots <- otu_table(phylo_roots)
+#head(OTU_table_phylo_roots)
+#write.table(OTU_table_phylo_roots, "OTU_table_phylo_roots.txt")
+
+#Re-import the table OTU_table_phylo_roots_1.xlsx
+#OTU_table_phylo_roots_1<-read_excel("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/OTU_table_phylo_roots_1.xlsx")
+
+#abund_roots = OTU_table_phylo_roots_1[,3:ncol(OTU_table_phylo_roots_1)] #ASV abundance starts at column 3
+#Type = OTU_table_phylo_roots_1$Type # create a vector that contains the information from the "Type" column
+#set.seed(771)
+#inv_roots = multipatt(abund_roots, Type, func = "r.g", control = how(nperm=9999))
+#summary(inv_roots)
+```
+
+2) Soil samples
+```{r}
+#https://jkzorz.github.io/2019/07/02/Indicator-species-analysis.html
+#library(indicspecies)
+
+# Export the OTU table, with a Sample column, Type column and then ASV & abundances per column
+#OTU_table_phylo_soil <- otu_table(phylo_soil)
+#head(OTU_table_phylo_soil)
+#write.table(OTU_table_phylo_soil, "OTU_table_phylo_soil.txt")
+
+#Re-import the table OTU_table_phylo_soil_1.xlsx
+#OTU_table_phylo_soil_1<-read_excel("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/OTU_table_phylo_soil_1.xlsx")
+
+#abund_soil = OTU_table_phylo_soil_1[,3:ncol(OTU_table_phylo_soil_1)] #ASV abundance starts at column 3
+#Type = OTU_table_phylo_soil_1$Type # create a vector that contains the information from the "Type" column
+#set.seed(771)
+#inv_soil = multipatt(abund_soil, Type, func = "r.g", control = how(nperm=9999))
+#summary(inv_soil)
+
+#IndVal.g is the corrected version of IndVal for unequal group sizes. "r." measures correlation between two binary vectors: r.g. is a correction of this measurement which uses abundance and not just presence/absence	
+#A = specificity or positive predictive value 
+#(proba que le groupe investigué appartienne bien au groupe target, du fait que cette espèce indic soit dedans),
+# B= fidelity or sensitivity: (proba qu'une espèce indic appartienne bien au groupe target)
+
+```
+
+
+3) Unplanted samples
+```{r}
+#library(indicspecies)
+
+# Export the OTU table, with a Sample column, Type column and then ASV & abundances per column
+#OTU_table_phylo_unplanted <- otu_table(phylo_unplanted)
+#head(OTU_table_phylo_unplanted)
+#write.table(OTU_table_phylo_unplanted, "OTU_table_phylo_unplanted.txt")
+
+#Re-import the table OTU_table_phylo_unplanted_1.xlsx
+#OTU_table_phylo_unplanted_1<-read_excel("C:/Users/hmiddleton/Dropbox/Projet_Mutants_miPEPs_miRNA/Harriet/Metabarcoding_mutants_and_miPEP/Analyses_métabarcoding/miPEP_H/ITS/OTU_table_phylo_unplanted_1.xlsx")
+
+#abund_unplanted = OTU_table_phylo_unplanted_1[,3:ncol(OTU_table_phylo_unplanted_1)] #ASV abundance starts at column 3
+#Type = OTU_table_phylo_unplanted_1$Type # create a vector that contains the information from the "Type" column
+#set.seed(771)
+#inv_unplanted = multipatt(abund_unplanted, Type, func = "r.g", control = how(nperm=9999))
+#summary(inv_unplanted)
+```
+
