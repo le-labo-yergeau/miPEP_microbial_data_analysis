@@ -274,6 +274,17 @@ display_venn(input, lwd = 2, lty ='blank',  fill=myCol, # Numbers
         cat.default.pos = "outer")
 ```
 
+Nice Theme
+```{r}
+  niceTheme <- theme(
+    axis.text.x = element_blank(),
+    axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(),
+    axis.text.y = element_text(size = 10),
+    legend.text = element_text(size = 9),
+    strip.text = element_text(size = 10), strip.background = element_rect(colour = "black", fill = "white"),
+  legend.position="right",panel.background = element_rect(fill = "white",colour="grey"),panel.grid.major = element_line(colour = "white"))
+```
 
 
 Abundance plot in all samples
@@ -286,7 +297,7 @@ pseq <- phylo_abs_16S %>% aggregate_taxa(level = "Phylum")
 ps1.com.fam <- names(sort(taxa_sums(pseq), decreasing = TRUE))[1:10]
 ps1.com.fam <- prune_taxa(ps1.com.fam, pseq)
 
-plot_bar(ps1.com.fam, "Phylum", fill="Phylum", facet_grid=Compartment~Type)
+plot_bar(ps1.com.fam, "Phylum", fill="Phylum", facet_grid=Compartment~Type) + niceTheme
 ```
 
 Abudance plots (top phyla & genera) in roots and close rhizosphere samples
@@ -311,7 +322,8 @@ StackedBarPlot_phylum <- taxa_abundance_table_phylum_roots %>%
     axis.text.y = element_text(size = 12),
     legend.text = element_text(size = 10),
     strip.text = element_text(size = 12)
-  )
+  ) + niceTheme + scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
+"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
 StackedBarPlot_phylum
 
 #Create a boxplot to show differences in composition of each phylum per Type
@@ -340,7 +352,9 @@ StackedBarPlot_phylum_rel <- taxa_abundance_table_phylum_roots_rel %>%
     axis.text.y = element_text(size = 12),
     legend.text = element_text(size = 10),
     strip.text = element_text(size = 12)
-  )
+  ) + niceTheme+
+scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
+"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
 StackedBarPlot_phylum_rel
 
 ############# GENUS ##############
@@ -357,6 +371,29 @@ StackedBarPlot_genus_roots <- taxa_abundance_table_genus_roots %>%
   ggplot(aes(x =Sample, y = Abundance, fill = Genus)) +
   geom_bar(stat = "identity") +
   labs(x = "",
+       y = "Absolute Abundance",
+       title = "Genus Absolute Abundance") +
+  facet_grid(~ Type, scales = "free") +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    strip.text = element_text(size = 12)
+  ) + niceTheme+
+scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
+"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
+
+StackedBarPlot_genus_roots
+
+
+# Transform Taxa counts to relative abundance for nice abundance plots
+genus_roots_relative <- transform_sample_counts(ps1._roots_genus_top10, function(OTU) OTU/sum(OTU) * 100)
+taxa_abundance_table_genus_roots_rel <- psmelt(genus_roots_relative)
+
+StackedBarPlot_genus_rel <- taxa_abundance_table_genus_roots_rel %>% 
+  ggplot(aes(x =Sample, y = Abundance, fill = Genus)) +
+  geom_bar(stat = "identity") +
+  labs(x = "",
        y = "Relative Abundance",
        title = "Genus Relative Abundance") +
   facet_grid(~ Type, scales = "free") +
@@ -365,9 +402,10 @@ StackedBarPlot_genus_roots <- taxa_abundance_table_genus_roots %>%
     axis.text.y = element_text(size = 12),
     legend.text = element_text(size = 10),
     strip.text = element_text(size = 12)
-  )
+  ) + niceTheme + scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
+"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
 
-StackedBarPlot_genus_roots
+StackedBarPlot_genus_rel
 
 #Boxplot
 
@@ -1108,26 +1146,35 @@ Another type of analysis is to look at specific OTUs/ASVs that are specifically 
 ```{r}
 library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
 
-#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
-ds2_roots <- phyloseq_to_deseq2(phylo_roots, ~ Type) 
-#Specify your reference group, or else it will use alphabetical order
-ds2_roots$Type <- relevel(ds2_roots$Type, ref = "Control-mi-PEP")
+# Subset phylo_roots to have only the control and miPEP-A
 
-#calculate geometric means prior to estimate size factors
-gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
-geoMeans = apply(counts(ds2_roots), 1, gm_mean)
-ds2_roots= estimateSizeFactors(ds2_roots, geoMeans = geoMeans)
+phylo_roots_1 <- subset_samples(phylo_roots, Type=="Control-mi-PEP")
+phylo_roots_2 <- subset_samples(phylo_roots, Type=="miPEP-A")
+phylo_roots_A <- merge_phyloseq(phylo_roots_1,phylo_roots_2)
+
+rm(phylo_roots_1, phylo_roots_2)
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_roots <- phyloseq_to_deseq2(phylo_roots_A, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_roots$Type <- relevel(ds2_roots$Type, ref = "Control-mi-PEP")  
 
 dds_roots <- DESeq(ds2_roots, test="Wald", fitType="parametric")
 
+keep <- rowSums(counts(dds_roots) >= 10 ) >=3 #filters out ASVs present in less than 3 samples in this subset (under 10 reads)
+dds_roots <- dds_roots[keep,]
+
+resultsNames(dds_roots) #prints the names of the coefficients
+
 ##miPEP-A##
+resLFC <- lfcShrink(dds_roots, coef="Type_miPEP.A_vs_Control.mi.PEP", type="ashr")
+resLFC
 
-res_roots_miPEPa <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_roots_miPEPa_order = res_roots_miPEPa[order(res_roots_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+alpha=0.001
 
-alpha = 0.001
-sigtab_roots_miPEPa = res_roots_miPEPa_order[which(res_roots_miPEPa_order$padj < alpha),]#179 ASVs
-sigtab_roots_miPEPa_top_50 <- sigtab_roots_miPEPa[c(1:50),] # select the 50 ASV with lowest p-adj
+res_roots_miPEPa_order = resLFC[order(resLFC$padj, na.last=NA), ] #570ASVs
+sigtab_roots_miPEPa = res_roots_miPEPa_order[which(res_roots_miPEPa_order$padj < alpha),] #55 ASVs
+sigtab_roots_miPEPa_top_50 <- sigtab_roots_miPEPa[c(1:50),] 
 sigtab_roots_miPEPa_top_50 = cbind(as(sigtab_roots_miPEPa_top_50, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPa_top_50), ], "matrix"))
 dim(sigtab_roots_miPEPa_top_50)
 
@@ -1141,94 +1188,170 @@ scale_fill_discrete <- function(palname = "Set1", ...) {
 x = tapply(sigtab_roots_miPEPa_top_50$log2FoldChange, sigtab_roots_miPEPa_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_roots_miPEPa_top_50$Phylum = factor(as.character(sigtab_roots_miPEPa_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_roots_miPEPa_top_50$log2FoldChange, sigtab_roots_miPEPa_top_50$Genus, function(x) max(x))
+
+sigtab_roots_miPEPa_top_50 <- tibble::rownames_to_column(sigtab_roots_miPEPa_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_roots_miPEPa_top_50$log2FoldChange, sigtab_roots_miPEPa_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_roots_miPEPa_top_50$Genus = factor(as.character(sigtab_roots_miPEPa_top_50$Genus), levels=names(x))
-plot_miPEPa_roots <- ggplot(sigtab_roots_miPEPa_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in roots and close rhizosphere")
-plot_miPEPa_roots
+sigtab_roots_miPEPa_top_50$VALUE = factor(as.character(sigtab_roots_miPEPa_top_50$VALUE), levels=names(x))
+plot_miPEPa_roots <- ggplot(sigtab_roots_miPEPa_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-A in roots and close rhizosphere")
+
+sigtab_roots_miPEPa_order <- order(sigtab_roots_miPEPa_top_50$log2FoldChange)
+sigtab_roots_miPEPa_order = sigtab_roots_miPEPa_top_50[order(sigtab_roots_miPEPa_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_roots_miPEPa_order$Genus)
+
+plot_miPEPa_roots_order <- plot_miPEPa_roots + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c( "darkorchid", "darkolivegreen1","brown1","firebrick", "lightskyblue","darkgreen", "khaki2","deeppink","darksalmon"))
+plot_miPEPa_roots_order <- plot_miPEPa_roots_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPa_roots_order
+
+rm(phylo_roots_A)
 
 ##miPEP-B##
 
-res_roots_miPEPb <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_roots_miPEPb_order = res_roots_miPEPb[order(res_roots_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+phylo_roots_1 <- subset_samples(phylo_roots, Type=="Control-mi-PEP")
+phylo_roots_2 <- subset_samples(phylo_roots, Type=="miPEP-B")
+phylo_roots_B <- merge_phyloseq(phylo_roots_1,phylo_roots_2)
 
-alpha = 0.001
-sigtab_roots_miPEPb = res_roots_miPEPb_order[which(res_roots_miPEPb_order$padj < alpha),]#175 ASVs
-sigtab_roots_miPEPb_top_50 <- sigtab_roots_miPEPb[c(1:50),] # select the 50 ASV with lowest p-adj
+rm(phylo_roots_1, phylo_roots_2)
+
+ds2_roots <- phyloseq_to_deseq2(phylo_roots_B, ~ Type) 
+
+ds2_roots$Type <- relevel(ds2_roots$Type, ref = "Control-mi-PEP")  
+
+dds_roots <- DESeq(ds2_roots, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_roots) >= 10 ) >=3
+dds_roots <- dds_roots[keep,]
+
+resLFC <- lfcShrink(dds_roots, coef="Type_miPEP.B_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_roots_miPEPb_order = resLFC[order(resLFC$padj, na.last=NA), ] #551 ASVs
+sigtab_roots_miPEPb = res_roots_miPEPb_order[which(res_roots_miPEPb_order$padj < alpha),] #69 ASVs
+sigtab_roots_miPEPb_top_50 <- sigtab_roots_miPEPb[c(1:50),] 
 sigtab_roots_miPEPb_top_50 = cbind(as(sigtab_roots_miPEPb_top_50, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPb_top_50), ], "matrix"))
 dim(sigtab_roots_miPEPb_top_50)
 
+
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_roots_miPEPb_top_50$log2FoldChange, sigtab_roots_miPEPb_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_roots_miPEPb_top_50$Phylum = factor(as.character(sigtab_roots_miPEPb_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_roots_miPEPb_top_50$log2FoldChange, sigtab_roots_miPEPb_top_50$Genus, function(x) max(x))
+
+sigtab_roots_miPEPb_top_50 <- tibble::rownames_to_column(sigtab_roots_miPEPb_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_roots_miPEPb_top_50$log2FoldChange, sigtab_roots_miPEPb_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_roots_miPEPb_top_50$Genus = factor(as.character(sigtab_roots_miPEPb_top_50$Genus), levels=names(x))
-plot_miPEPb_roots <- ggplot(sigtab_roots_miPEPb_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in roots and close rhizosphere")
-plot_miPEPb_roots
+sigtab_roots_miPEPb_top_50$VALUE = factor(as.character(sigtab_roots_miPEPb_top_50$VALUE), levels=names(x))
+plot_miPEPb_roots <- ggplot(sigtab_roots_miPEPb_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-B in roots and close rhizosphere")
+
+sigtab_roots_miPEPb_order = sigtab_roots_miPEPb_top_50[order(sigtab_roots_miPEPb_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_roots_miPEPb_order$Genus)
+
+plot_miPEPb_roots_order <- plot_miPEPb_roots + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkorchid", "darkolivegreen1","brown1", "deeppink","darkblue",   "firebrick",  "darksalmon","darkcyan","darkorange" ))
+plot_miPEPb_roots_order <- plot_miPEPb_roots_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPb_roots_order
+
+rm(phylo_roots_B)
 
 ##miPEP-C##
+phylo_roots_1 <- subset_samples(phylo_roots, Type=="Control-mi-PEP")
+phylo_roots_2 <- subset_samples(phylo_roots, Type=="miPEP-C")
+phylo_roots_C <- merge_phyloseq(phylo_roots_1,phylo_roots_2)
 
-res_roots_miPEPc <- results(dds_roots, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_roots_miPEPc_order = res_roots_miPEPc[order(res_roots_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+rm(phylo_roots_1, phylo_roots_2)
 
-alpha = 0.001
-sigtab_roots_miPEPc = res_roots_miPEPc_order[which(res_roots_miPEPc_order$padj < alpha),]#153ASVs
-sigtab_roots_miPEPc_top_50 <- sigtab_roots_miPEPc[c(1:50),] # select the 50 ASV with lowest p-adj
+ds2_roots <- phyloseq_to_deseq2(phylo_roots_C, ~ Type) 
+
+ds2_roots$Type <- relevel(ds2_roots$Type, ref = "Control-mi-PEP")  
+
+dds_roots <- DESeq(ds2_roots, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_roots) >= 10 ) >=3
+dds_roots <- dds_roots[keep,]
+
+resLFC <- lfcShrink(dds_roots, coef="Type_miPEP.C_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_roots_miPEPc_order = resLFC[order(resLFC$padj, na.last=NA), ] #584
+sigtab_roots_miPEPc = res_roots_miPEPc_order[which(res_roots_miPEPc_order$padj < alpha),] #59
+sigtab_roots_miPEPc_top_50 <- sigtab_roots_miPEPc[c(1:50),] 
 sigtab_roots_miPEPc_top_50 = cbind(as(sigtab_roots_miPEPc_top_50, "data.frame"), as(tax_table(phylo_roots)[rownames(sigtab_roots_miPEPc_top_50), ], "matrix"))
 dim(sigtab_roots_miPEPc_top_50)
 
+
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_roots_miPEPc_top_50$log2FoldChange, sigtab_roots_miPEPc_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_roots_miPEPc_top_50$Phylum = factor(as.character(sigtab_roots_miPEPc_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_roots_miPEPc_top_50$log2FoldChange, sigtab_roots_miPEPc_top_50$Genus, function(x) max(x))
+
+sigtab_roots_miPEPc_top_50 <- tibble::rownames_to_column(sigtab_roots_miPEPc_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_roots_miPEPc_top_50$log2FoldChange, sigtab_roots_miPEPc_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_roots_miPEPc_top_50$Genus = factor(as.character(sigtab_roots_miPEPc_top_50$Genus), levels=names(x))
-plot_miPEPc_roots <- ggplot(sigtab_roots_miPEPc_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in roots and close rhizosphere")
-plot_miPEPc_roots
+sigtab_roots_miPEPc_top_50$VALUE = factor(as.character(sigtab_roots_miPEPc_top_50$VALUE), levels=names(x))
+plot_miPEPc_roots <- ggplot(sigtab_roots_miPEPc_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-C in roots and close rhizosphere")
+
+sigtab_roots_miPEPc_order = sigtab_roots_miPEPc_top_50[order(sigtab_roots_miPEPc_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_roots_miPEPc_order$Genus)
+
+plot_miPEPc_roots_order <- plot_miPEPc_roots + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkolivegreen1","darkorchid", "darkblue","brown1","deeppink", "firebrick","darkcyan","darksalmon"))
+plot_miPEPc_roots_order <- plot_miPEPc_roots_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPc_roots_order
+
+rm(phylo_roots_C)
 ```
 
 2) Soil samples
 ```{r}
 library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
 
-#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
-ds2_soil <- phyloseq_to_deseq2(phylo_soil, ~ Type) 
-#Specify your reference group, or else it will use alphabetical order
-ds2_soil$Type <- relevel(ds2_soil$Type, ref = "Control-mi-PEP")
+# Subset phylo_soil to have only the control and miPEP-A
 
-#calculate geometric means prior to estimate size factors
-gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
-geoMeans = apply(counts(ds2_soil), 1, gm_mean)
-ds2_soil= estimateSizeFactors(ds2_soil, geoMeans = geoMeans)
+phylo_soil_1 <- subset_samples(phylo_soil, Type=="Control-mi-PEP")
+phylo_soil_2 <- subset_samples(phylo_soil, Type=="miPEP-A")
+phylo_soil_A <- merge_phyloseq(phylo_soil_1,phylo_soil_2)
+
+rm(phylo_soil_1, phylo_soil_2)
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_soil <- phyloseq_to_deseq2(phylo_soil_A, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_soil$Type <- relevel(ds2_soil$Type, ref = "Control-mi-PEP")  
 
 dds_soil <- DESeq(ds2_soil, test="Wald", fitType="parametric")
 
+keep <- rowSums(counts(dds_soil) >= 10 ) >=3 #filters out ASVs present in less than 3 samples in this subset (under 10 reads)
+dds_soil <- dds_soil[keep,]
+
+resultsNames(dds_soil) #prints the names of the coefficients
+
 ##miPEP-A##
+resLFC <- lfcShrink(dds_soil, coef="Type_miPEP.A_vs_Control.mi.PEP", type="ashr")
+resLFC
 
-res_soil_miPEPa <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_soil_miPEPa_order = res_soil_miPEPa[order(res_soil_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+alpha=0.001
 
-alpha = 0.001
-sigtab_soil_miPEPa = res_soil_miPEPa_order[which(res_soil_miPEPa_order$padj < alpha),]#254ASV
-sigtab_soil_miPEPa_top_50 <- sigtab_soil_miPEPa[c(1:50),] # select the 50 ASV with lowest p-adj
+res_soil_miPEPa_order = resLFC[order(resLFC$padj, na.last=NA), ] #834ASVs
+sigtab_soil_miPEPa = res_soil_miPEPa_order[which(res_soil_miPEPa_order$padj < alpha),] #106 ASVs
+sigtab_soil_miPEPa_top_50 <- sigtab_soil_miPEPa[c(1:50),] 
 sigtab_soil_miPEPa_top_50 = cbind(as(sigtab_soil_miPEPa_top_50, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPa_top_50), ], "matrix"))
 dim(sigtab_soil_miPEPa_top_50)
 
@@ -1242,94 +1365,170 @@ scale_fill_discrete <- function(palname = "Set1", ...) {
 x = tapply(sigtab_soil_miPEPa_top_50$log2FoldChange, sigtab_soil_miPEPa_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_soil_miPEPa_top_50$Phylum = factor(as.character(sigtab_soil_miPEPa_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_soil_miPEPa_top_50$log2FoldChange, sigtab_soil_miPEPa_top_50$Genus, function(x) max(x))
+
+sigtab_soil_miPEPa_top_50 <- tibble::rownames_to_column(sigtab_soil_miPEPa_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_soil_miPEPa_top_50$log2FoldChange, sigtab_soil_miPEPa_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_soil_miPEPa_top_50$Genus = factor(as.character(sigtab_soil_miPEPa_top_50$Genus), levels=names(x))
-plot_miPEPa_soil <- ggplot(sigtab_soil_miPEPa_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in distant rhizosphere")
-plot_miPEPa_soil
+sigtab_soil_miPEPa_top_50$VALUE = factor(as.character(sigtab_soil_miPEPa_top_50$VALUE), levels=names(x))
+plot_miPEPa_soil <- ggplot(sigtab_soil_miPEPa_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-A in distant rhizosphere")
+
+sigtab_soil_miPEPa_order <- order(sigtab_soil_miPEPa_top_50$log2FoldChange)
+sigtab_soil_miPEPa_order = sigtab_soil_miPEPa_top_50[order(sigtab_soil_miPEPa_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_soil_miPEPa_order$Genus)
+
+plot_miPEPa_soil_order <- plot_miPEPa_soil + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c( "darkorchid", "darkolivegreen1","brown1","firebrick", "lightskyblue","darkgreen", "khaki2","deeppink","darksalmon"))
+plot_miPEPa_soil_order <- plot_miPEPa_soil_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPa_soil_order
+
+rm(phylo_soil_A)
 
 ##miPEP-B##
 
-res_soil_miPEPb <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_soil_miPEPb_order = res_soil_miPEPb[order(res_soil_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+phylo_soil_1 <- subset_samples(phylo_soil, Type=="Control-mi-PEP")
+phylo_soil_2 <- subset_samples(phylo_soil, Type=="miPEP-B")
+phylo_soil_B <- merge_phyloseq(phylo_soil_1,phylo_soil_2)
 
-alpha = 0.001
-sigtab_soil_miPEPb = res_soil_miPEPb_order[which(res_soil_miPEPb_order$padj < alpha),]#235
-sigtab_soil_miPEPb_top_50 <- sigtab_soil_miPEPb[c(1:50),] # select the 50 ASV with lowest p-adj
+rm(phylo_soil_1, phylo_soil_2)
+
+ds2_soil <- phyloseq_to_deseq2(phylo_soil_B, ~ Type) 
+
+ds2_soil$Type <- relevel(ds2_soil$Type, ref = "Control-mi-PEP")  
+
+dds_soil <- DESeq(ds2_soil, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_soil) >= 10 ) >=3
+dds_soil <- dds_soil[keep,]
+
+resLFC <- lfcShrink(dds_soil, coef="Type_miPEP.B_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_soil_miPEPb_order = resLFC[order(resLFC$padj, na.last=NA), ] #985 ASVs
+sigtab_soil_miPEPb = res_soil_miPEPb_order[which(res_soil_miPEPb_order$padj < alpha),] #100 ASVs
+sigtab_soil_miPEPb_top_50 <- sigtab_soil_miPEPb[c(1:50),] 
 sigtab_soil_miPEPb_top_50 = cbind(as(sigtab_soil_miPEPb_top_50, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPb_top_50), ], "matrix"))
 dim(sigtab_soil_miPEPb_top_50)
 
+
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_soil_miPEPb_top_50$log2FoldChange, sigtab_soil_miPEPb_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_soil_miPEPb_top_50$Phylum = factor(as.character(sigtab_soil_miPEPb_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_soil_miPEPb_top_50$log2FoldChange, sigtab_soil_miPEPb_top_50$Genus, function(x) max(x))
+
+sigtab_soil_miPEPb_top_50 <- tibble::rownames_to_column(sigtab_soil_miPEPb_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_soil_miPEPb_top_50$log2FoldChange, sigtab_soil_miPEPb_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_soil_miPEPb_top_50$Genus = factor(as.character(sigtab_soil_miPEPb_top_50$Genus), levels=names(x))
-plot_miPEPb_soil <- ggplot(sigtab_soil_miPEPb_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in distant rhizosphere")
-plot_miPEPb_soil
+sigtab_soil_miPEPb_top_50$VALUE = factor(as.character(sigtab_soil_miPEPb_top_50$VALUE), levels=names(x))
+plot_miPEPb_soil <- ggplot(sigtab_soil_miPEPb_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-B in distant rhizosphere")
+
+sigtab_soil_miPEPb_order = sigtab_soil_miPEPb_top_50[order(sigtab_soil_miPEPb_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_soil_miPEPb_order$Genus)
+
+plot_miPEPb_soil_order <- plot_miPEPb_soil + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkorchid", "darkolivegreen1","brown1", "deeppink","darkblue",   "firebrick",  "darksalmon","darkcyan","darkorange" ))
+plot_miPEPb_soil_order <- plot_miPEPb_soil_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPb_soil_order
+
+rm(phylo_soil_B)
 
 ##miPEP-C##
+phylo_soil_1 <- subset_samples(phylo_soil, Type=="Control-mi-PEP")
+phylo_soil_2 <- subset_samples(phylo_soil, Type=="miPEP-C")
+phylo_soil_C <- merge_phyloseq(phylo_soil_1,phylo_soil_2)
 
-res_soil_miPEPc <- results(dds_soil, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_soil_miPEPc_order = res_soil_miPEPc[order(res_soil_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+rm(phylo_soil_1, phylo_soil_2)
 
-alpha = 0.001
-sigtab_soil_miPEPc = res_soil_miPEPc_order[which(res_soil_miPEPc_order$padj < alpha),]#220ASV
-sigtab_soil_miPEPc_top_50 <- sigtab_soil_miPEPc[c(1:50),] # select the 50 ASV with lowest p-adj
+ds2_soil <- phyloseq_to_deseq2(phylo_soil_C, ~ Type) 
+
+ds2_soil$Type <- relevel(ds2_soil$Type, ref = "Control-mi-PEP")  
+
+dds_soil <- DESeq(ds2_soil, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_soil) >= 10 ) >=3
+dds_soil <- dds_soil[keep,]
+
+resLFC <- lfcShrink(dds_soil, coef="Type_miPEP.C_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_soil_miPEPc_order = resLFC[order(resLFC$padj, na.last=NA), ] #937
+sigtab_soil_miPEPc = res_soil_miPEPc_order[which(res_soil_miPEPc_order$padj < alpha),] #106
+sigtab_soil_miPEPc_top_50 <- sigtab_soil_miPEPc[c(1:50),] 
 sigtab_soil_miPEPc_top_50 = cbind(as(sigtab_soil_miPEPc_top_50, "data.frame"), as(tax_table(phylo_soil)[rownames(sigtab_soil_miPEPc_top_50), ], "matrix"))
 dim(sigtab_soil_miPEPc_top_50)
 
+
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_soil_miPEPc_top_50$log2FoldChange, sigtab_soil_miPEPc_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_soil_miPEPc_top_50$Phylum = factor(as.character(sigtab_soil_miPEPc_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_soil_miPEPc_top_50$log2FoldChange, sigtab_soil_miPEPc_top_50$Genus, function(x) max(x))
+
+sigtab_soil_miPEPc_top_50 <- tibble::rownames_to_column(sigtab_soil_miPEPc_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_soil_miPEPc_top_50$log2FoldChange, sigtab_soil_miPEPc_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_soil_miPEPc_top_50$Genus = factor(as.character(sigtab_soil_miPEPc_top_50$Genus), levels=names(x))
-plot_miPEPc_soil <- ggplot(sigtab_soil_miPEPc_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in distant rhizosphere")
-plot_miPEPc_soil
+sigtab_soil_miPEPc_top_50$VALUE = factor(as.character(sigtab_soil_miPEPc_top_50$VALUE), levels=names(x))
+plot_miPEPc_soil <- ggplot(sigtab_soil_miPEPc_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-C in distant rhizosphere")
+
+sigtab_soil_miPEPc_order = sigtab_soil_miPEPc_top_50[order(sigtab_soil_miPEPc_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_soil_miPEPc_order$Genus)
+
+plot_miPEPc_soil_order <- plot_miPEPc_soil + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkolivegreen1","darkorchid", "darkblue","brown1","deeppink", "firebrick","darkcyan","darksalmon", "green"))
+plot_miPEPc_soil_order <- plot_miPEPc_soil_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPc_soil_order
+
+rm(phylo_soil_C)
 ```
 
 3) Unplanted samples
 ```{r}
 library(DESeq2) # The DESeq2 package uses the raw OTU/ASV table (non rarefied phyloseq) and calculates a negative binomial GLM for each OTU/ASV , the Wald test for stats
 
-#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
-ds2_unplanted <- phyloseq_to_deseq2(phylo_unplanted, ~ Type) 
-#Specify your reference group, or else it will use alphabetical order
-ds2_unplanted$Type <- relevel(ds2_unplanted$Type, ref = "Control-mi-PEP")
+# Subset phylo_unplanted to have only the control and miPEP-A
 
-#calculate geometric means prior to estimate size factors
-gm_mean = function(x, na.rm=TRUE){exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))}
-geoMeans = apply(counts(ds2_unplanted), 1, gm_mean)
-ds2_unplanted= estimateSizeFactors(ds2_unplanted, geoMeans = geoMeans)
+phylo_unplanted_1 <- subset_samples(phylo_unplanted, Type=="Control-mi-PEP")
+phylo_unplanted_2 <- subset_samples(phylo_unplanted, Type=="miPEP-A")
+phylo_unplanted_A <- merge_phyloseq(phylo_unplanted_1,phylo_unplanted_2)
+
+rm(phylo_unplanted_1, phylo_unplanted_2)
+
+#Convert phyloseq object into a DESeqDataSet object with dispersion estimates using "Type" as the main factor
+ds2_unplanted <- phyloseq_to_deseq2(phylo_unplanted_A, ~ Type) 
+#Specify your reference group, or else it will use alphabetical order
+ds2_unplanted$Type <- relevel(ds2_unplanted$Type, ref = "Control-mi-PEP")  
 
 dds_unplanted <- DESeq(ds2_unplanted, test="Wald", fitType="parametric")
 
+keep <- rowSums(counts(dds_unplanted) >= 10 ) >=3 #filters out ASVs present in less than 3 samples in this subset (under 10 reads)
+dds_unplanted <- dds_unplanted[keep,]
+
+resultsNames(dds_unplanted) #prints the names of the coefficients
+
 ##miPEP-A##
+resLFC <- lfcShrink(dds_unplanted, coef="Type_miPEP.A_vs_Control.mi.PEP", type="ashr")
+resLFC
 
-res_unplanted_miPEPa <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-A")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_unplanted_miPEPa_order = res_unplanted_miPEPa[order(res_unplanted_miPEPa$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+alpha=0.001
 
-alpha = 0.001
-sigtab_unplanted_miPEPa = res_unplanted_miPEPa_order[which(res_unplanted_miPEPa_order$padj < alpha),] #211ASV
-sigtab_unplanted_miPEPa_top_50 <- sigtab_unplanted_miPEPa[c(1:50),]
+res_unplanted_miPEPa_order = resLFC[order(resLFC$padj, na.last=NA), ] #720
+sigtab_unplanted_miPEPa = res_unplanted_miPEPa_order[which(res_unplanted_miPEPa_order$padj < alpha),] #77 ASVs
+sigtab_unplanted_miPEPa_top_50 <- sigtab_unplanted_miPEPa[c(1:50),] 
 sigtab_unplanted_miPEPa_top_50 = cbind(as(sigtab_unplanted_miPEPa_top_50, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPa_top_50), ], "matrix"))
 dim(sigtab_unplanted_miPEPa_top_50)
 
@@ -1343,70 +1542,138 @@ scale_fill_discrete <- function(palname = "Set1", ...) {
 x = tapply(sigtab_unplanted_miPEPa_top_50$log2FoldChange, sigtab_unplanted_miPEPa_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_unplanted_miPEPa_top_50$Phylum = factor(as.character(sigtab_unplanted_miPEPa_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_unplanted_miPEPa_top_50$log2FoldChange, sigtab_unplanted_miPEPa_top_50$Genus, function(x) max(x))
+
+sigtab_unplanted_miPEPa_top_50 <- tibble::rownames_to_column(sigtab_unplanted_miPEPa_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_unplanted_miPEPa_top_50$log2FoldChange, sigtab_unplanted_miPEPa_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_unplanted_miPEPa_top_50$Genus = factor(as.character(sigtab_unplanted_miPEPa_top_50$Genus), levels=names(x))
-plot_miPEPa_unplanted <- ggplot(sigtab_unplanted_miPEPa_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-A in unplanted soils")
-plot_miPEPa_unplanted
+sigtab_unplanted_miPEPa_top_50$VALUE = factor(as.character(sigtab_unplanted_miPEPa_top_50$VALUE), levels=names(x))
+plot_miPEPa_unplanted <- ggplot(sigtab_unplanted_miPEPa_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-A in unplanted soils")
+
+sigtab_unplanted_miPEPa_order <- order(sigtab_unplanted_miPEPa_top_50$log2FoldChange)
+sigtab_unplanted_miPEPa_order = sigtab_unplanted_miPEPa_top_50[order(sigtab_unplanted_miPEPa_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_unplanted_miPEPa_order$Genus)
+
+plot_miPEPa_unplanted_order <- plot_miPEPa_unplanted + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c( "darkorchid", "darkolivegreen1","brown1","firebrick", "lightskyblue","darkgreen", "khaki2","deeppink","darksalmon"))
+plot_miPEPa_unplanted_order <- plot_miPEPa_unplanted_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPa_unplanted_order
+
+rm(phylo_unplanted_A)
 
 ##miPEP-B##
 
-res_unplanted_miPEPb <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-B")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_unplanted_miPEPb_order = res_unplanted_miPEPb[order(res_unplanted_miPEPb$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+phylo_unplanted_1 <- subset_samples(phylo_unplanted, Type=="Control-mi-PEP")
+phylo_unplanted_2 <- subset_samples(phylo_unplanted, Type=="miPEP-B")
+phylo_unplanted_B <- merge_phyloseq(phylo_unplanted_1,phylo_unplanted_2)
 
-alpha = 0.001
-sigtab_unplanted_miPEPb = res_unplanted_miPEPb_order[which(res_unplanted_miPEPb_order$padj < alpha),] #182ASV
-sigtab_unplanted_miPEPb_top_50 <- sigtab_unplanted_miPEPb[c(1:50),]
+rm(phylo_unplanted_1, phylo_unplanted_2)
+
+ds2_unplanted <- phyloseq_to_deseq2(phylo_unplanted_B, ~ Type) 
+
+ds2_unplanted$Type <- relevel(ds2_unplanted$Type, ref = "Control-mi-PEP")  
+
+dds_unplanted <- DESeq(ds2_unplanted, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_unplanted) >= 10 ) >=3
+dds_unplanted <- dds_unplanted[keep,]
+
+resLFC <- lfcShrink(dds_unplanted, coef="Type_miPEP.B_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_unplanted_miPEPb_order = resLFC[order(resLFC$padj, na.last=NA), ] #902 ASVs
+sigtab_unplanted_miPEPb = res_unplanted_miPEPb_order[which(res_unplanted_miPEPb_order$padj < alpha),] #83 ASVs
+sigtab_unplanted_miPEPb_top_50 <- sigtab_unplanted_miPEPb[c(1:50),] 
 sigtab_unplanted_miPEPb_top_50 = cbind(as(sigtab_unplanted_miPEPb_top_50, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPb_top_50), ], "matrix"))
 dim(sigtab_unplanted_miPEPb_top_50)
 
+
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_unplanted_miPEPb_top_50$log2FoldChange, sigtab_unplanted_miPEPb_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_unplanted_miPEPb_top_50$Phylum = factor(as.character(sigtab_unplanted_miPEPb_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_unplanted_miPEPb_top_50$log2FoldChange, sigtab_unplanted_miPEPb_top_50$Genus, function(x) max(x))
+
+sigtab_unplanted_miPEPb_top_50 <- tibble::rownames_to_column(sigtab_unplanted_miPEPb_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_unplanted_miPEPb_top_50$log2FoldChange, sigtab_unplanted_miPEPb_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_unplanted_miPEPb_top_50$Genus = factor(as.character(sigtab_unplanted_miPEPb_top_50$Genus), levels=names(x))
-plot_miPEPb_unplanted <- ggplot(sigtab_unplanted_miPEPb_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-B in unplanted soils")
-plot_miPEPb_unplanted
+sigtab_unplanted_miPEPb_top_50$VALUE = factor(as.character(sigtab_unplanted_miPEPb_top_50$VALUE), levels=names(x))
+plot_miPEPb_unplanted <- ggplot(sigtab_unplanted_miPEPb_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-B in unplanted soils")
+
+sigtab_unplanted_miPEPb_order = sigtab_unplanted_miPEPb_top_50[order(sigtab_unplanted_miPEPb_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_unplanted_miPEPb_order$Genus)
+
+plot_miPEPb_unplanted_order <- plot_miPEPb_unplanted + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkorchid", "darkolivegreen1","brown1", "deeppink","darkblue",   "firebrick",  "darksalmon","darkcyan","darkorange","turquoise","magenta","green" ))
+plot_miPEPb_unplanted_order <- plot_miPEPb_unplanted_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPb_unplanted_order
+
+rm(phylo_unplanted_B)
 
 ##miPEP-C##
+phylo_unplanted_1 <- subset_samples(phylo_unplanted, Type=="Control-mi-PEP")
+phylo_unplanted_2 <- subset_samples(phylo_unplanted, Type=="miPEP-C")
+phylo_unplanted_C <- merge_phyloseq(phylo_unplanted_1,phylo_unplanted_2)
 
-res_unplanted_miPEPc <- results(dds_unplanted, cooksCutoff = FALSE, contrast = c("Type","Control-mi-PEP","miPEP-C")) # gives the table showing the comparison of log2FoldChange between the "treated" and "untreated" group
-res_unplanted_miPEPc_order = res_unplanted_miPEPc[order(res_unplanted_miPEPc$padj, na.last=NA), ] # order results by adjusted p-value (Benjamini-Hochberg correction)
+rm(phylo_unplanted_1, phylo_unplanted_2)
 
-alpha = 0.001
-sigtab_unplanted_miPEPc = res_unplanted_miPEPc_order[which(res_unplanted_miPEPc_order$padj < alpha),]#173ASV
-sigtab_unplanted_miPEPc_top_50 <- sigtab_unplanted_miPEPc[c(1:50),]
+ds2_unplanted <- phyloseq_to_deseq2(phylo_unplanted_C, ~ Type) 
+
+ds2_unplanted$Type <- relevel(ds2_unplanted$Type, ref = "Control-mi-PEP")  
+
+dds_unplanted <- DESeq(ds2_unplanted, test="Wald", fitType="parametric")
+
+keep <- rowSums(counts(dds_unplanted) >= 10 ) >=3
+dds_unplanted <- dds_unplanted[keep,]
+
+resLFC <- lfcShrink(dds_unplanted, coef="Type_miPEP.C_vs_Control.mi.PEP", type="ashr")
+resLFC
+
+alpha=0.001
+
+res_unplanted_miPEPc_order = resLFC[order(resLFC$padj, na.last=NA), ] #823
+sigtab_unplanted_miPEPc = res_unplanted_miPEPc_order[which(res_unplanted_miPEPc_order$padj < alpha),] #78
+sigtab_unplanted_miPEPc_top_50 <- sigtab_unplanted_miPEPc[c(1:50),] 
 sigtab_unplanted_miPEPc_top_50 = cbind(as(sigtab_unplanted_miPEPc_top_50, "data.frame"), as(tax_table(phylo_unplanted)[rownames(sigtab_unplanted_miPEPc_top_50), ], "matrix"))
 dim(sigtab_unplanted_miPEPc_top_50)
 
 
 ########### Graphical representation #####
-library("ggplot2")
-theme_set(theme_bw())
-scale_fill_discrete <- function(palname = "Set1", ...) {
-    scale_fill_brewer(palette = palname, ...)
-}
+
 # Phylum order
 x = tapply(sigtab_unplanted_miPEPc_top_50$log2FoldChange, sigtab_unplanted_miPEPc_top_50$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtab_unplanted_miPEPc_top_50$Phylum = factor(as.character(sigtab_unplanted_miPEPc_top_50$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtab_unplanted_miPEPc_top_50$log2FoldChange, sigtab_unplanted_miPEPc_top_50$Genus, function(x) max(x))
+
+sigtab_unplanted_miPEPc_top_50 <- tibble::rownames_to_column(sigtab_unplanted_miPEPc_top_50, "VALUE")
+
+# VALUE order
+x = tapply(sigtab_unplanted_miPEPc_top_50$log2FoldChange, sigtab_unplanted_miPEPc_top_50$VALUE, function(x) max(x))
 x = sort(x, TRUE)
-sigtab_unplanted_miPEPc_top_50$Genus = factor(as.character(sigtab_unplanted_miPEPc_top_50$Genus), levels=names(x))
-plot_miPEPc_unplanted <- ggplot(sigtab_unplanted_miPEPc_top_50, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=1) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p-adj<0.001)",subtitle = "MiPEP-C in unplanted soils")
-plot_miPEPc_unplanted
+sigtab_unplanted_miPEPc_top_50$VALUE = factor(as.character(sigtab_unplanted_miPEPc_top_50$VALUE), levels=names(x))
+plot_miPEPc_unplanted <- ggplot(sigtab_unplanted_miPEPc_top_50, aes(x=VALUE, y=log2FoldChange, color=Phylum)) + geom_point(size=2) +theme(axis.text.x = element_text(size=8, angle = -90, hjust = 0, vjust=0.5), legend.text = element_text(size = 10))+ geom_hline(yintercept=0, color="black") + labs(title = "Top 50 differentially abundant ASVs in comparison with control (p.adj<0.001)",subtitle = "MiPEP-C in unplanted soils")
+
+sigtab_unplanted_miPEPc_order = sigtab_unplanted_miPEPc_top_50[order(sigtab_unplanted_miPEPc_top_50$VALUE, na.last=NA), ]
+
+my_labels<-c(sigtab_unplanted_miPEPc_order$Genus)
+
+plot_miPEPc_unplanted_order <- plot_miPEPc_unplanted + scale_x_discrete(
+  labels=my_labels) + scale_color_manual(values = c("darkolivegreen1","darkorchid", "darkblue","brown1","deeppink","firebrick","darksalmon","darkcyan","darkorange","turquoise","magenta","green"))
+plot_miPEPc_unplanted_order <- plot_miPEPc_unplanted_order + labs(x = "Genus") + coord_flip() + labs(y="shrunken log2FoldChanges")
+plot_miPEPc_unplanted_order
+
+rm(phylo_unplanted_C)
 ```
+
+
 
 Indicator Species
 
