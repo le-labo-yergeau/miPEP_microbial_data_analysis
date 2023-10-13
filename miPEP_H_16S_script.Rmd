@@ -15,20 +15,22 @@ Loading all the necessary packages and calling my files: I'm using the otu_table
 ASVs found in less than 3 samples are discarded.
 
 ```{r}
+library(tidyverse)
 library(phyloseq)
 library(data.table)
 library(vegan)
 library(ggplot2)
 library(readxl)
+library(here)
 
-biom_file<-import_biom("~/metabarcoding_miPEP_mutants/16S/16S/plaque2/export/otu_tables/otu_table_filtered.biom", "~/metabarcoding_miPEP_mutants/16S/16S/plaque2/export/tree/tree.fasttree", "~/metabarcoding_miPEP_mutants/16S/16S/plaque2/export/otu_tables/otus.fasta", parseFunction=parse_taxonomy_greengenes)
+biom_file<-import_biom(here("data","16S", "otu_table_filtered.biom"), here("data","16S","tree.fasttree"), here("data","16S","otus.fasta"), parseFunction=parse_taxonomy_greengenes)
 biom_file
 ```
 
 A data frame is created from the mapping_file, which contains all information concerning each sample. Each row corresponds to a sample and is named in consequence. Merge the biom file and the metadata into one phyloseq object.
 
 ```{r}
-sample<- data.frame(fread("~/metabarcoding_miPEP_mutants/16S/16S/plaque2/export/mapping_file.tsv", sep="\t"), check.names=F)
+sample<- data.frame(fread(here("data","16S", "mapping_file.tsv"), sep="\t"), check.names=F)
 head(sample)
 sample=sample_data(sample)
 
@@ -109,7 +111,7 @@ p
 6) Dowload the biom file and import to R  
 
 ```{r}
-otu_biom <- import_biom("~/metabarcoding_miPEP_mutants/16S/16S/plaque2/otu_table_absolute_16S.biom1")
+otu_biom <- import_biom(here("data", "16S", "otu_table_absolute_16S.biom1"))
 
 tax <- tax_table(tax_table_phylo_filtered) #taxa hasn't changed
 
@@ -1733,4 +1735,44 @@ Indicator Species
 #set.seed(771)
 #inv_unplanted = multipatt(abund_unplanted, Type, func = "r.g", control = how(nperm=9999))
 #summary(inv_unplanted)
+```
+
+
+Etienne's simplified graphs
+```{r}
+pseq_roots <- phylo_roots %>% aggregate_taxa(level = "Phylum")
+pseq_unplanted <- phylo_unplanted %>% aggregate_taxa(level = "Phylum")
+
+keep_phyla <- names(sort(taxa_sums(pseq_roots), decreasing = TRUE))[1:10]
+
+# Transform Taxa counts to relative abundance using total number of reads - include others
+ps1_roots_phylum_relabun_EY <- data.frame(apply(pseq_roots@otu_table, 1, "/", colSums(pseq_roots@otu_table))*100)
+rowSums(ps1_roots_phylum_relabun_EY) #100 everywhere
+ps1_roots_phylum_relabun_EY_top10 <- ps1_roots_phylum_relabun_EY[,colnames(ps1_roots_phylum_relabun_EY)%in%keep_phyla]
+others <- 100-rowSums(ps1_roots_phylum_relabun_EY_top10)
+ps1_roots_phylum_relabun_EY_top10 <- data.frame(ps1_roots_phylum_relabun_EY_top10, others)
+rowSums(ps1_roots_phylum_relabun_EY_top10)#Sanity check; 100 all over
+
+#Add mapping file info
+sample.s <- sample[order(row.names(sample)),]#Sort mapping file
+sample.root.s <- sample.s[sample.s$Compartment=="RACINE",]
+sample.root.s <- sample.root.s[-23,] #One sample that was removed from the OTU table
+ps1_roots_phylum_relabun_EY_top10.s <- ps1_roots_phylum_relabun_EY_top10[order(row.names(ps1_roots_phylum_relabun_EY_top10)),] #Sort Phylum table
+row.names(ps1_roots_phylum_relabun_EY_top10.s)==row.names(sample.root.s)#Sanity check - all TRUE
+phy.map.root <- data.frame(sample.root.s,ps1_roots_phylum_relabun_EY_top10.s)#Merge
+rowSums(phy.map.root[,5:15]) #Should be all 100s
+phy.map.root.long <- gather(phy.map.root,Phylum,relabund,5:15) #transform in long format for ggplot
+#tax.map.long$growthstage <- factor(tax.map.long$growthstage, c("tillering", "stemelongation", "booting", "heading", "flowering" ))#Reorder manually the growth stages
+
+StackedBarPlot_phylum_rel_EY <- ggplot(phy.map.root.long, aes(x =Type, y = relabund, fill = Phylum)) +
+  geom_bar(stat = "summary", fun ="mean", position = "stack") +
+  labs(y = "Relative Abundance", x="Treatment") +
+  facet_grid(~ Compartment, scales = "free") +
+  scale_y_continuous(limits = c(0,100), expand = c(0,0)) +
+  theme_bw()+
+scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
+"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
+StackedBarPlot_phylum_rel_EY
+
+
 ```
