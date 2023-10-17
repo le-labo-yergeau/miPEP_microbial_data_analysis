@@ -22,6 +22,7 @@ library(vegan)
 library(ggplot2)
 library(readxl)
 library(here)
+library(microbiome)
 
 biom_file<-import_biom(here("data","16S", "otu_table_filtered.biom"), here("data","16S","tree.fasttree"), here("data","16S","otus.fasta"), parseFunction=parse_taxonomy_greengenes)
 biom_file
@@ -1675,7 +1676,62 @@ plot_miPEPc_unplanted_order
 rm(phylo_unplanted_C)
 ```
 
+4) Etienne's -- make list of ASVs that are affected in root, but not in unplanted -- through plant effect
+```{r}
+#miPEP-A
+row.names(sigtab_roots_miPEPa)[row.names(sigtab_roots_miPEPa) %in% row.names(sigtab_unplanted_miPEPa)] #642
+phylo_roots@tax_table["642",] #Taxonomy: "Bacteria" "Proteobacteria" "Alphaproteobacteria" "Rhizobiales" "KF-JG30-B3" "KF-JG30-B3FA"
 
+#miPEP-B
+row.names(sigtab_roots_miPEPb)[row.names(sigtab_roots_miPEPb) %in% row.names(sigtab_unplanted_miPEPb)] #582, 940, 1347, 1197, 1155, 1000
+phylo_roots@tax_table["582",] #"Bacteria" "Bacteroidetes" "Sphingobacteriia" "Sphingobacteriales" "Chitinophagaceae" "Taibaiella" 
+phylo_roots@tax_table["940",] #"Bacteria" "Bacteroidetes" "Sphingobacteriia" "Sphingobacteriales" "Sphingobacteriaceae" "Pedobacter"
+phylo_roots@tax_table["1347",] #"Bacteria" "Planctomycetes" "Phycisphaerae" "Tepidisphaerales" "Tepidisphaeraceae" "TepidisphaeraceaeFA"
+phylo_roots@tax_table["1197",] #"Bacteria" "Proteobacteria" "Alphaproteobacteria" "Rhodospirillales" "Rhodospirillaceae" "Dongia" 
+phylo_roots@tax_table["1155",] #"Bacteria" "Actinobacteria" "Actinobacteria" "Frankiales" "Acidothermaceae" "Acidothermus"
+phylo_roots@tax_table["1000",] #"Bacteria" "Acidobacteria" "Acidobacteria" "Acidobacteriales" "Acidobacteriaceae (Subgroup 1)", "Granulicella"
+
+#miPEP-C
+row.names(sigtab_roots_miPEPc)[row.names(sigtab_roots_miPEPc) %in% row.names(sigtab_unplanted_miPEPc)] #530, 1060
+phylo_roots@tax_table["530",] #"Bacteria" "Proteobacteria" "Gammaproteobacteria" "Xanthomonadales" "Xanthomonadales Incertae Sedis", "Steroidobacter"
+phylo_roots@tax_table["1060",] #"Bacteria" "Bacteroidetes" "Sphingobacteriia" "Sphingobacteriales" "Saprospiraceae" "Lewinella"
+
+#Overlap between miPEPs
+row.names(sigtab_roots_miPEPa)[row.names(sigtab_roots_miPEPa) %in% row.names(sigtab_roots_miPEPb)] #"1083" "267"  "642"  "1228" "414"  "790"  "249"  "582"  "576"  "2836" "990"  "620"  "768"  "700"  "1563"
+row.names(sigtab_roots_miPEPa)[row.names(sigtab_roots_miPEPa) %in% row.names(sigtab_roots_miPEPc)] #"267"  "642"  "1228" "790"  "422"  "872"  "520"  "1074" "914"  "1994"
+row.names(sigtab_roots_miPEPb)[row.names(sigtab_roots_miPEPb) %in% row.names(sigtab_roots_miPEPc)] #"753"  "267"  "474"  "64"   "297"  "614"  "173"  "1228" "333"  "790"  "642"  "453"  "417"  "839"  "309" "1347" "816"  "1000" "1398" "1162" "1639" "894" 
+
+
+#Venn diagram
+library(gplots)
+#Root
+root.venn <-venn(list(row.names(sigtab_roots_miPEPa), 
+     row.names(sigtab_roots_miPEPb),
+     row.names(sigtab_roots_miPEPc))
+     )
+attr(root.venn, "intersections")$`A:B:C` #267, 642, 1228,790
+
+#Shared taxonomy
+phylo_roots@tax_table["267",]
+phylo_roots@tax_table["642",]
+phylo_roots@tax_table["790",]
+phylo_roots@tax_table["1228",]
+
+#unplanted
+unplanted.venn <- venn(list(row.names(sigtab_unplanted_miPEPa), 
+     row.names(sigtab_unplanted_miPEPb),
+     row.names(sigtab_unplanted_miPEPc))
+     )
+attr(unplanted.venn, "intersections")$`A:B:C` #750, 752, 865, 1988, 2735
+
+#Shared taxonomy
+phylo_unplanted@tax_table["750",]
+phylo_unplanted@tax_table["752",]
+phylo_unplanted@tax_table["865",]
+phylo_unplanted@tax_table["1988",]
+phylo_unplanted@tax_table["2735",]
+
+```
 
 Indicator Species
 
@@ -1738,13 +1794,14 @@ Indicator Species
 ```
 
 
-Etienne's simplified graphs
+Etienne's simplified graphs -- community composition
 ```{r}
 pseq_roots <- phylo_roots %>% aggregate_taxa(level = "Phylum")
 pseq_unplanted <- phylo_unplanted %>% aggregate_taxa(level = "Phylum")
 
 keep_phyla <- names(sort(taxa_sums(pseq_roots), decreasing = TRUE))[1:10]
 
+##Roots
 # Transform Taxa counts to relative abundance using total number of reads - include others
 ps1_roots_phylum_relabun_EY <- data.frame(apply(pseq_roots@otu_table, 1, "/", colSums(pseq_roots@otu_table))*100)
 rowSums(ps1_roots_phylum_relabun_EY) #100 everywhere
@@ -1764,15 +1821,132 @@ rowSums(phy.map.root[,5:15]) #Should be all 100s
 phy.map.root.long <- gather(phy.map.root,Phylum,relabund,5:15) #transform in long format for ggplot
 #tax.map.long$growthstage <- factor(tax.map.long$growthstage, c("tillering", "stemelongation", "booting", "heading", "flowering" ))#Reorder manually the growth stages
 
-StackedBarPlot_phylum_rel_EY <- ggplot(phy.map.root.long, aes(x =Type, y = relabund, fill = Phylum)) +
+##Unplanted
+# Transform Taxa counts to relative abundance using total number of reads - include others
+ps1_unplanted_phylum_relabun_EY <- data.frame(apply(pseq_unplanted@otu_table, 1, "/", colSums(pseq_unplanted@otu_table))*100)
+rowSums(ps1_unplanted_phylum_relabun_EY) #100 everywhere
+ps1_unplanted_phylum_relabun_EY_top10 <- ps1_unplanted_phylum_relabun_EY[,colnames(ps1_unplanted_phylum_relabun_EY)%in%keep_phyla]
+others <- 100-rowSums(ps1_unplanted_phylum_relabun_EY_top10)
+ps1_unplanted_phylum_relabun_EY_top10 <- data.frame(ps1_unplanted_phylum_relabun_EY_top10, others)
+rowSums(ps1_unplanted_phylum_relabun_EY_top10)#Sanity check; 100 all over
+
+#Add mapping file info
+sample.unplanted.s <- sample.s[sample.s$Compartment=="SOL.NU",]
+ps1_unplanted_phylum_relabun_EY_top10.s <- ps1_unplanted_phylum_relabun_EY_top10[order(row.names(ps1_unplanted_phylum_relabun_EY_top10)),] #Sort Phylum table
+row.names(ps1_unplanted_phylum_relabun_EY_top10.s)==row.names(sample.unplanted.s)#Sanity check - all TRUE
+phy.map.unplanted <- data.frame(sample.unplanted.s,ps1_unplanted_phylum_relabun_EY_top10.s)#Merge
+rowSums(phy.map.unplanted[,5:15]) #Should be all 100s
+phy.map.unplanted.long <- gather(phy.map.unplanted,Phylum,relabund,5:15) #transform in long format for ggplot
+
+#Merge both long tables
+phylum.long <- rbind(phy.map.root.long,phy.map.unplanted.long)
+
+#To have correct label names
+comp.labs <- c("Roots","Unplanted")
+names(comp.labs) <- c("RACINE", "SOL.NU")
+
+StackedBarPlot_phylum_rel_EY <- ggplot(phylum.long, aes(x =Type, y = relabund, fill = Phylum)) +
   geom_bar(stat = "summary", fun ="mean", position = "stack") +
-  labs(y = "Relative Abundance", x="Treatment") +
-  facet_grid(~ Compartment, scales = "free") +
+  labs(y = "Relative abundance (%)", x="Treatment") +
+  facet_grid(~ Compartment, scales = "free", labeller = labeller(Compartment = comp.labs)) +
   scale_y_continuous(limits = c(0,100), expand = c(0,0)) +
+  scale_x_discrete(labels=c("Water", "miPEP-A", "miPEP-B", "miPEP-C"))+
   theme_bw()+
-scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", "darksalmon", "darkblue",
-"royalblue4", "dodgerblue3", "steelblue1", "lightskyblue", "darkseagreen", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "brown1", "darkorange1", "cyan1", "darkgrey"))
+scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick"))
+
 StackedBarPlot_phylum_rel_EY
 
+
+```
+
+
+Etienne's simplified graphs -- alpha diversity
+```{r}
+div.table <- rbind(p_Div_roots$data, p_Div_unplanted$data)
+div.table.shannon <- div.table[div.table$variable=="Shannon",]
+
+# Test normality
+shapiro.test(div.table.shannon[div.table.shannon$Compartment=="RACINE",]$value) #W = 0.9674, p-value = 0.4506
+shapiro.test(div.table.shannon[div.table.shannon$Compartment=="SOL.NU",]$value) #W = 0.89464, p-value = 0.005312
+
+#Anova
+anova.div.root <- aov(value~Type, data = div.table.shannon[div.table.shannon$Compartment=="RACINE",])
+anova.div.unplanted <- aov(value~Type, data = div.table.shannon[div.table.shannon$Compartment=="SOL.NU",])
+
+summary(anova.div.root) #F=1.292, P=0.297
+summary(anova.div.unplanted) #F=6.587. P=0.00174
+TukeyHSD(anova.div.unplanted) #ctrl: a, A: b, B: a, C:a
+tuk.labels.div <- data.frame(x=c(1,2,3,4), y=c(rep(5.59, 4)), Compartment="SOL.NU", symbol=c("a","b","a","a")) #To add letters on the graph
+
+#To have correct label names
+comp.labs <- c("Roots","Unplanted")
+names(comp.labs) <- c("RACINE", "SOL.NU")
+
+div.table.shannon$Type <- factor(div.table.shannon$Type, c("Control-mi-PEP", "miPEP-A", "miPEP-B", "miPEP-C"))#Reorder manually the treatments
+
+p_Div <- ggplot(div.table.shannon, aes(x=Type, y=value))+
+    geom_boxplot()+ 
+    geom_point()+
+    geom_text(data = tuk.labels.div, aes(x=x, y=y, label=symbol), size=5)+
+    theme_bw()+
+    facet_grid(~Compartment, labeller = labeller(Compartment = comp.labs))+
+    xlab("Treatment")+
+    ylab("Shannon diversity index")+ 
+    scale_x_discrete(labels=c("Water", "miPEP-A", "miPEP-B", "miPEP-C"))+
+  #theme(axis.text.y = element_text (), axis.text.x = element_blank (), axis.text =element_text(size=8), axis.title=element_text(size=12,face="bold"))+
+    scale_color_manual(values=c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D","#666666"))
+
+p_Div
+
+
+```
+
+
+qPCR graphs
+```{r}
+qPCR <- read.table(here("data", "qpcr.txt"), header = T, sep="\t")
+qPCR.s <- qPCR[order(qPCR$Sample),]
+qPCR.s$Sample==sample.s$X.SampleID #Sort check: 96 TRUE
+qPCR.sample <- cbind(sample.s,qPCR.s)
+
+# Test normality
+shapiro.test(qPCR.sample[qPCR.sample$Compartment=="RACINE",]$X16S) #W = 0.9264, p-value = 0.03112
+shapiro.test(qPCR.sample[qPCR.sample$Compartment=="SOL.NU",]$X16S) #W = 0.97239, p-value = 0.5679
+
+#Anova
+anova.16S.root <- aov(X16S~Type, data = qPCR.sample[qPCR.sample$Compartment=="RACINE",])
+anova.16S.unplanted <- aov(X16S~Type, data = qPCR.sample[qPCR.sample$Compartment=="SOL.NU",])
+
+summary(anova.16S.root) #F=1.94, P=0.146
+summary(anova.16S.unplanted) #F=4.84. P=0.00775
+TukeyHSD(anova.16S.unplanted) #ctrl: a, A: b, B: ab, C:ab
+tuk.labels.16S <- data.frame(x=c(1,2,3,4), y=c(rep(2e+05, 4)), Compartment="SOL.NU", symbol=c("a","b","ab","ab")) #To add letters on the graph
+
+#To have correct label names
+comp.labs <- c("Roots","Unplanted")
+names(comp.labs) <- c("RACINE", "SOL.NU")
+
+#16S
+bact.qPCR.box <- ggplot(qPCR.sample[qPCR.sample$Compartment!="SOL",], aes(x=Type, y=X16S)) +
+  geom_boxplot() +
+  geom_point()+
+  geom_text(data = tuk.labels.16S, aes(x=x, y=y, label=symbol), size=5)+
+  facet_grid(~Compartment, labeller = labeller(Compartment = comp.labs))+
+  theme_bw() + 
+  ylab("16S rRNA gene copies (per ng DNA)") + theme(legend.position="none")+
+  xlab("Treatment")+
+  scale_x_discrete(labels=c("Water", "miPEP-A", "miPEP-B", "miPEP-C"))+
+  scale_y_log10()
+bact.qPCR.box
+
+```
+
+Put graphs together in one figure
+```{r}
+library(ggpubr)
+
+Fig1 <- ggarrange(StackedBarPlot_phylum_rel_EY,p_Div,bact.qPCR.box, ncol = 1, legend = "bottom", labels = c("A","B","C"))
+Fig1
+ggsave(filename = here("output", "Fig1.tiff"),  plot = Fig1, compression = "lzw", height = 14, units = "in")
 
 ```
