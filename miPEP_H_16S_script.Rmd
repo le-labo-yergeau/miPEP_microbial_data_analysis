@@ -23,6 +23,7 @@ library(ggplot2)
 library(readxl)
 library(here)
 library(microbiome)
+library(pairwiseAdonis)
 
 biom_file<-import_biom(here("data","16S", "otu_table_filtered.biom"), here("data","16S","tree.fasttree"), here("data","16S","otus.fasta"), parseFunction=parse_taxonomy_greengenes)
 biom_file
@@ -1016,7 +1017,7 @@ pick_new_outgroup <- function(tree.unrooted){
   new.outgroup <- treeDT[which.max(length)]$id
   return(new.outgroup) }
   
-tree <- read.tree("~/metabarcoding_miPEP_mutants/16S/16S/plaque2/export/tree/tree.fasttree")
+tree <- read.tree(here("data", "16S", "tree.fasttree"))
 tree
 my.tree <- phy_tree(tree)
 out.group <- pick_new_outgroup(my.tree)
@@ -1856,7 +1857,30 @@ scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagr
 
 StackedBarPlot_phylum_rel_EY
 
+#Anovas
+#Root
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Acidobacteria"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Actinobacteria"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Bacteroidetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Chloroflexi"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Cyanobacteria"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="FCPU426"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Gemmatimonadetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Planctomycetes"),])) #40.78 3.64e-10 ***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Proteobacteria"),])) #8.91 0.000287 ***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Phylum=="Verrucomicrobia"),])) #NS
 
+#Unplanted
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Acidobacteria"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Actinobacteria"),])) #3.991 0.0174*
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Bacteroidetes"),])) #6.739 0.0145**
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Chloroflexi"),])) #16.86 1.88e-06***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Cyanobacteria"),])) #4.118 0.0154*
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="FCPU426"),])) #11.87 3.41e-05***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Gemmatimonadetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Planctomycetes"),])) #8.296 0.000419 ***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Proteobacteria"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Phylum=="Verrucomicrobia"),])) #3.313 0.0343*
 ```
 
 

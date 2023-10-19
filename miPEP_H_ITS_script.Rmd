@@ -23,6 +23,7 @@ library(ggplot2)
 library(readxl)
 library(here)
 library(microbiome)
+library(pairwiseAdonis)
 
 
 biom_file<-import_biom(here("data", "ITS", "otu_table_filtered.biom"), here("data", "ITS", "tree.fasttree"), here("data", "ITS", "otus.fasta"), parseFunction=parse_taxonomy_greengenes)
@@ -1011,7 +1012,7 @@ pick_new_outgroup <- function(tree.unrooted){
   new.outgroup <- treeDT[which.max(length)]$id
   return(new.outgroup) }
   
-tree <- read.tree("~/metabarcoding_miPEP_mutants/ITS/ITS/plaque2/export/tree/tree.fasttree")
+tree <- read.tree(here("data", "ITS", "tree.fasttree"))
 tree
 my.tree <- phy_tree(tree)
 out.group <- pick_new_outgroup(my.tree)
@@ -1857,6 +1858,29 @@ StackedBarPlot_phylum_rel_EY <- ggplot(phylum.long, aes(x =Type, y = relabund, f
 scale_fill_manual(values = c("darkblue", "darkgoldenrod1","darkgrey", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", "darkgreen", "deeppink", "khaki2", "firebrick"), labels = c("Agaricomycetes", "Chytridiomycetes", "Dothideomycetes", "Eurotiomycetes", "Leotiomycetes", "Mucoromycotina", "Others", "Saccharomycetes", "Sordariomycetes", "Tremmellomycetes", "Unclassified"))
 
 StackedBarPlot_phylum_rel_EY
+
+#Anovas
+#Root
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Agaricomycetes"),])) #7.715 0.000758 ***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Chytridiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Dothideomycetes"),])) #7.977 0.000622 ***
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Eurotiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Leotiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Mucoromycotina_cls_Incertae_sedis"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Saccharomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Sordariomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="RACINE" & phylum.long$Class=="Tremellomycetes"),])) #NS
+
+#Unplanted
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Agaricomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Chytridiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Dothideomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Eurotiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Leotiomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Mucoromycotina_cls_Incertae_sedis"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Saccharomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Sordariomycetes"),])) #NS
+summary(aov(relabund~Type, data = phylum.long[(phylum.long$Compartment=="SOL.NU" & phylum.long$Class=="Tremellomycetes"),])) #NS
 
 
 ```
