@@ -1975,8 +1975,8 @@ Put graphs together in one figure
 ```{r}
 library(ggpubr)
 
-Fig2 <- ggarrange(StackedBarPlot_phylum_rel_EY,p_Div,fun.qPCR.box, ncol = 1, legend = "bottom", labels = c("A","B","C"))
-Fig2
-ggsave(filename = here("output", "Fig2.tiff"),  plot = Fig2, compression = "lzw", height = 14, units = "in")
+Fig4 <- ggarrange(StackedBarPlot_phylum_rel_EY,p_Div,fun.qPCR.box, ncol = 1, legend = "bottom", labels = c("A","B","C"))
+Fig4
+ggsave(filename = here("output", "Fig4.tiff"),  plot = Fig4, compression = "lzw", height = 14, units = "in")
 
 ```
